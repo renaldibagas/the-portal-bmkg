@@ -79,33 +79,38 @@ def handle_weather():
         except Exception as e:
             print(f"[Warn] Direct Discord delivery failed: {e}")
 
-        # 2. Resilient fallback: Upload card to Catbox and dispatch via Discord proxy
-        # (Bypasses Cloudflare Error 1015 datacenter IP rate limits on Render)
+        # 2. Resilient fallback: Upload card to tmpfiles.org and dispatch via Discord proxy
+        # (Bypasses Cloudflare Error 1015 datacenter IP blocks on Render)
         fallback_error = "Unknown"
         try:
-            print("[Cloud] Direct Discord blocked. Using Catbox CDN + Webhook Proxy fallback...")
-            cat_res = requests.post(
-                "https://catbox.moe/user/api.php",
-                data={"reqtype": "fileupload"},
-                files={"fileToUpload": ("weather_card.png", img_bytes, "image/png")},
-                timeout=20
+            print("[Cloud] Direct Discord blocked. Using tmpfiles CDN + Webhook Proxy fallback...")
+            tmp_res = requests.post(
+                "https://tmpfiles.org/api/v1/upload",
+                files={"file": ("weather_card.png", img_bytes, "image/png")},
+                timeout=25
             )
-            print(f"[Cloud] Catbox upload response: {cat_res.status_code} -> {cat_res.text[:80]}")
-            if cat_res.status_code == 200 and cat_res.text.strip().startswith("http"):
-                hosted_url = cat_res.text.strip()
-                embed["image"] = {"url": hosted_url}
-                discord_payload["embeds"] = [embed]
-                
-                # Send via reliable Roblox/Discord proxy or target webhook
-                proxy_url = target_webhook.replace("https://discord.com", "https://webhook.lewisakura.moe")
-                p_res = requests.post(proxy_url, json=discord_payload, timeout=15)
-                print(f"[Cloud] Proxy response: {p_res.status_code}")
-                if p_res.status_code in (200, 204):
-                    return jsonify({"success": True, "message": "Weather card delivered via CDN Proxy!", "cdn_url": hosted_url})
+            print(f"[Cloud] tmpfiles response: {tmp_res.status_code}")
+            if tmp_res.status_code == 200:
+                res_data = tmp_res.json()
+                raw_url = res_data.get("data", {}).get("url", "")
+                if raw_url:
+                    # Convert tmpfiles view URL into direct download image URL: https://tmpfiles.org/dl/...
+                    direct_img_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                    embed["image"] = {"url": direct_img_url}
+                    discord_payload["embeds"] = [embed]
+                    
+                    # Dispatch to Discord via Roblox-approved proxy
+                    proxy_url = target_webhook.replace("https://discord.com", "https://webhook.lewisakura.moe")
+                    p_res = requests.post(proxy_url, json=discord_payload, timeout=15)
+                    print(f"[Cloud] Proxy response: {p_res.status_code}")
+                    if p_res.status_code in (200, 204):
+                        return jsonify({"success": True, "message": "Weather card delivered via CDN Proxy!", "cdn_url": direct_img_url})
+                    else:
+                        fallback_error = f"Proxy error {p_res.status_code}: {p_res.text}"
                 else:
-                    fallback_error = f"Proxy error {p_res.status_code}: {p_res.text}"
+                    fallback_error = f"tmpfiles missing URL in data: {res_data}"
             else:
-                fallback_error = f"Catbox upload failed: {cat_res.status_code} -> {cat_res.text}"
+                fallback_error = f"tmpfiles upload failed: {tmp_res.status_code} -> {tmp_res.text}"
         except Exception as e:
             fallback_error = f"Fallback exception: {str(e)}"
             print(f"[Error] Fallback delivery failed: {e}")
