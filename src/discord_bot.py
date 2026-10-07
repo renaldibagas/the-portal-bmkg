@@ -330,28 +330,33 @@ if HAS_SLASH_TREE:
 
     @bot.tree.command(name="gacha", description="View today's 24-hour seasonal weather probability gacha pool.")
     async def slash_gacha(interaction: discord.Interaction):
+        await interaction.response.defer()
         embed = build_gacha_embed()
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @bot.tree.command(name="portal", description="View Dewdrop Portal countdown, Lycaros Boss raid, and Rift mutations.")
     async def slash_portal(interaction: discord.Interaction):
+        await interaction.response.defer()
         embed = build_portal_embed()
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @bot.tree.command(name="modifiers", description="Inspect active realm buffs, price impacts, and combat modifiers.")
     async def slash_modifiers(interaction: discord.Interaction):
+        await interaction.response.defer()
         embed = build_modifiers_embed()
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @bot.tree.command(name="forecast", description="Preview 6-slot 2-hour roll schedule for the current seasonal cycle.")
     async def slash_forecast(interaction: discord.Interaction):
+        await interaction.response.defer()
         embed = build_forecast_embed()
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @bot.tree.command(name="help", description="List all available BMKG weather observatory slash commands.")
     async def slash_help(interaction: discord.Interaction):
+        await interaction.response.defer()
         embed = build_help_embed()
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @bot.tree.command(name="createroles", description="Auto-create weather roles with matching colors in the server.")
     @app_commands.default_permissions(manage_roles=True)
