@@ -1,0 +1,20 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.png
+!assets/backgrounds/*.png
+!assets/backgrounds/*.jpg
+
+# Local test scripts & scratch
+scratch_*.txt
+test_preview.txt
+last_live_scan.png
+debug_*.png
+live_hover_test_capture.png
+ocr_detection_area_preview.png
+
+# Environment
+.env
+venv/
+env/
