@@ -2,12 +2,17 @@ import io
 import json
 import os
 import datetime
-from flask import Flask, request, jsonify
+import tempfile
+import uuid
+from flask import Flask, request, jsonify, send_from_directory
 import requests
 
 from src.weather_card_generator import WeatherCardGenerator
 
 app = Flask(__name__)
+
+CARDS_DIR = os.path.join(tempfile.gettempdir(), "bmkg_cards")
+os.makedirs(CARDS_DIR, exist_ok=True)
 
 # Discord Webhook (configured via Environment Variable or default fallback)
 DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1540322408672534558/4UCzxOUqPmWeE-GYbWZ0ebZmyFB0ewE4dTZZziInsfZwnOzVJ9A4wXNO0dIdUfJzX7fC"
@@ -15,28 +20,68 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", DEFAULT_WEBHOOK)
 
 generator = WeatherCardGenerator()
 
+def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
+    # 1. Primary: Catbox.moe (Direct static image CDN with permanent hosting & full Discord crawler support)
+    try:
+        r = requests.post(
+            "https://catbox.moe/user/api.php",
+            data={"reqtype": "fileupload"},
+            files={"fileToUpload": (base_name, img_bytes, "image/jpeg")},
+            timeout=12
+        )
+        if r.status_code == 200 and r.text.startswith("https://files.catbox.moe/"):
+            return r.text.strip()
+    except Exception as e:
+        print(f"[CDN] Catbox upload error: {e}")
+
+    # 2. Secondary: Litterbox (Temporary 72h Catbox mirror)
+    try:
+        r = requests.post(
+            "https://litterbox.catbox.moe/resources/internals/api.php",
+            data={"reqtype": "fileupload", "time": "72h"},
+            files={"fileToUpload": (base_name, img_bytes, "image/jpeg")},
+            timeout=12
+        )
+        if r.status_code == 200 and r.text.startswith("https://litter.catbox.moe/"):
+            return r.text.strip()
+    except Exception as e:
+        print(f"[CDN] Litterbox upload error: {e}")
+
+    # 3. Third-party fallback: tmpfiles.org
+    try:
+        tmp_res = requests.post(
+            "https://tmpfiles.org/api/v1/upload",
+            files={"file": (base_name, img_bytes, "image/jpeg")},
+            timeout=15
+        )
+        if tmp_res.status_code == 200:
+            res_data = tmp_res.json()
+            raw_url = res_data.get("data", {}).get("url", "")
+            if raw_url:
+                return raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+    except Exception as e:
+        print(f"[CDN] tmpfiles upload error: {e}")
+
+    return None
+
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.3.0-hybrid",
+        "version": "2.4.0-catbox",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
+
+@app.route("/cards/<filename>", methods=["GET"])
+def serve_card(filename):
+    return send_from_directory(CARDS_DIR, filename, mimetype="image/jpeg")
 
 @app.route("/api/card/upload", methods=["POST"])
 def render_and_upload():
     """
-    Renders the anime weather card and uploads it to tmpfiles CDN.
-    Returns:
-    {
-        "status": "success",
-        "image_url": "https://tmpfiles.org/dl/...",
-        "weather_type": "...",
-        "embed": { ... }
-    }
-    This allows Roblox (or any client) to immediately dispatch the embed
-    directly to Discord without datacenter IP blocks!
+    Renders the anime weather card and uploads it to CDN (Catbox / Litterbox / Render fallback).
+    Returns direct image URL that Discord embeds immediately with full dimensions!
     """
     try:
         payload = request.get_json(force=True) or {}
@@ -46,21 +91,22 @@ def render_and_upload():
         buf.seek(0)
         img_bytes = buf.getvalue()
 
-        tmp_res = requests.post(
-            "https://tmpfiles.org/api/v1/upload",
-            files={"file": ("weather_card.jpg", img_bytes, "image/jpeg")},
-            timeout=25
-        )
-        if tmp_res.status_code == 200:
-            res_data = tmp_res.json()
-            raw_url = res_data.get("data", {}).get("url", "")
-            direct_img_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-            return jsonify({
-                "status": "success",
-                "image_url": direct_img_url
-            })
-        else:
-            return jsonify({"status": "error", "detail": f"CDN upload failed: {tmp_res.text}"}), 502
+        # Always save a local copy for direct serving fallback
+        file_id = f"card_{uuid.uuid4().hex[:10]}.jpg"
+        local_path = os.path.join(CARDS_DIR, file_id)
+        with open(local_path, "wb") as f:
+            f.write(img_bytes)
+
+        # Upload to CDN for fastest Discord unfurling
+        cdn_url = upload_card_to_cdn(img_bytes, base_name="weather_card.jpg")
+        if not cdn_url:
+            host_url = request.host_url.rstrip("/")
+            cdn_url = f"{host_url}/cards/{file_id}"
+
+        return jsonify({
+            "status": "success",
+            "image_url": cdn_url
+        })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
