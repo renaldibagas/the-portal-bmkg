@@ -20,7 +20,7 @@ def health():
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.1.0-cdn-proxy",
+        "version": "2.2.0-resilient",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
 
