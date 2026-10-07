@@ -31,14 +31,20 @@ def init_cloud_discord_bot():
     global _bot_started, _bot_error, _bot_instance_ref
     if _bot_started:
         return
-    bot_token = os.environ.get("DISCORD_BOT_TOKEN")
+    # Check multiple common env var names
+    bot_token = (
+        os.environ.get("DISCORD_BOT_TOKEN")
+        or os.environ.get("DISCORD_TOKEN")
+        or os.environ.get("BOT_TOKEN")
+        or os.environ.get("TOKEN")
+    )
     if not bot_token:
         # Check local .env fallback
         env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
         if os.path.exists(env_file):
             with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
-                    if line.startswith("DISCORD_BOT_TOKEN="):
+                    if any(line.startswith(k) for k in ["DISCORD_BOT_TOKEN=", "DISCORD_TOKEN=", "BOT_TOKEN="]):
                         bot_token = line.strip().split("=", 1)[1].strip("\"'")
                         break
 
@@ -114,17 +120,19 @@ def health():
         except Exception:
             pass
 
+    matched_keys = [k for k in os.environ.keys() if any(sub in k.upper() for sub in ["TOKEN", "DISCORD", "BOT"])]
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.5.1-direct-cdn",
+        "version": "2.5.2-direct-cdn",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "bot": {
-            "has_token": bool(os.environ.get("DISCORD_BOT_TOKEN")),
+            "has_token": bool(os.environ.get("DISCORD_BOT_TOKEN") or os.environ.get("DISCORD_TOKEN") or os.environ.get("BOT_TOKEN") or os.environ.get("TOKEN")),
             "started": _bot_started,
             "ready": bot_ready,
             "user": bot_user,
-            "error": _bot_error
+            "error": _bot_error,
+            "matched_env_keys": matched_keys
         }
     })
 
