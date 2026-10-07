@@ -27,8 +27,9 @@ def main():
         print("[Launcher] ⚠️ WARNING: DISCORD_BOT token not found in environment variables!")
 
     # 2. Start Gunicorn Web Server for Cloudflare/Discord CDN and Webhook handling
-    port = os.environ.get("PORT", "8080")
-    print(f"[Launcher] Starting Gunicorn on 0.0.0.0:{port}...")
+    raw_port = os.environ.get("PORT", "8080")
+    port = raw_port if str(raw_port).isdigit() else "8080"
+    print(f"[Launcher] Starting Gunicorn on 0.0.0.0:{port} (raw PORT was: {raw_port})...")
     
     cmd = [
         sys.executable, "-m", "gunicorn",
