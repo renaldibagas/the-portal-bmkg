@@ -1,0 +1,20 @@
+{
+  "discord_webhook_url": "https://discord.com/api/webhooks/1540322408672534558/4UCzxOUqPmWeE-GYbWZ0ebZmyFB0ewE4dTZZziInsfZwnOzVJ9A4wXNO0dIdUfJzX7fC",
+  "bot_username": "BMKG Lazie",
+  "discord_role_ping": "1038009132575379497",
+  "notification_mode": "on_change",
+  "interval_minutes": 10,
+  "portal_alert_threshold_minutes": 15,
+  "roblox_window_title": "Roblox",
+  "hover_point": {
+    "relative_x": 0.9337,
+    "relative_y": 0.3045
+  },
+  "crop_region": {
+    "relative_x": 0.7259,
+    "relative_y": 0.1441,
+    "relative_width": 0.14080000000000004,
+    "relative_height": 0.3233
+  },
+  "enable_debug_images": false
+}
