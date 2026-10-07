@@ -325,6 +325,101 @@ if HAS_SLASH_TREE:
         embed = build_help_embed()
         await interaction.response.send_message(embed=embed)
 
+    @bot.tree.command(name="createroles", description="Auto-create weather roles with matching colors in the server.")
+    @app_commands.default_permissions(manage_roles=True)
+    async def slash_createroles(interaction: discord.Interaction):
+        await interaction.response.defer()
+        guild = interaction.guild
+        if not guild:
+            await interaction.followup.send("❌ This command must be executed inside a Discord server.")
+            return
+
+        roles_to_create = [
+            ("Northern Lights", discord.Color.from_rgb(0, 255, 180), "Astral Aurora & Upgrade Event"),
+            ("Nightmare", discord.Color.from_rgb(180, 20, 35), "Blood Moon Eclipse & Abyssal Hazard"),
+            ("Portal Eclipse", discord.Color.from_rgb(160, 60, 240), "Dimensional Rift & Boss Raid"),
+            ("Snow", discord.Color.from_rgb(230, 240, 255), "Frost Blizzard & +20% Shop Surcharge"),
+            ("Heavy Rain", discord.Color.from_rgb(52, 73, 94), "Severe Downpour & +10% Shop Surcharge"),
+            ("Gale", discord.Color.from_rgb(22, 160, 133), "Violent Winds & +10% Shop Surcharge"),
+            ("Rain", discord.Color.from_rgb(52, 152, 219), "Downpour & 100% Auto-Water"),
+            ("Drizzle", discord.Color.from_rgb(93, 173, 226), "Soft Mist & 50% Auto-Water"),
+            ("Windy", discord.Color.from_rgb(26, 188, 156), "Fresh Breeze & Movement Modifier"),
+            ("Dry", discord.Color.from_rgb(243, 156, 18), "Sunny Skies & Standard Prices"),
+        ]
+
+        created = []
+        existing = []
+        for r_name, r_color, r_desc in roles_to_create:
+            match = discord.utils.get(guild.roles, name=r_name)
+            if match:
+                existing.append(f"• **{match.name}**: `<@&{match.id}>` (`{match.id}`)")
+            else:
+                try:
+                    new_role = await guild.create_role(
+                        name=r_name,
+                        color=r_color,
+                        mentionable=True,
+                        reason="BMKG Portal Observatory Weather Roles"
+                    )
+                    created.append(f"• **{new_role.name}**: `<@&{new_role.id}>` (`{new_role.id}`)")
+                except Exception as e:
+                    created.append(f"• Failed to create **{r_name}**: {e}")
+
+        desc = ""
+        if created:
+            desc += "✅ **Newly Created Roles:**\n" + "\n".join(created) + "\n\n"
+        if existing:
+            desc += "ℹ️ **Already Existing Roles:**\n" + "\n".join(existing)
+
+        embed = discord.Embed(
+            title="🎭 BMKG Weather Roles Sync",
+            description=desc or "No roles processed.",
+            color=0x2ECC71,
+            timestamp=datetime.datetime.utcnow()
+        )
+        embed.set_footer(text="Badan Meteorologi Klimatologi dan Gacha (BMKG)")
+        await interaction.followup.send(embed=embed)
+
+@bot.command(name="createroles")
+@commands.has_permissions(manage_roles=True)
+async def cmd_prefix_createroles(ctx):
+    guild = ctx.guild
+    if not guild:
+        await ctx.send("❌ This command must be executed inside a server.")
+        return
+
+    roles_to_create = [
+        ("Northern Lights", discord.Color.from_rgb(0, 255, 180)),
+        ("Nightmare", discord.Color.from_rgb(180, 20, 35)),
+        ("Portal Eclipse", discord.Color.from_rgb(160, 60, 240)),
+        ("Snow", discord.Color.from_rgb(230, 240, 255)),
+        ("Heavy Rain", discord.Color.from_rgb(52, 73, 94)),
+        ("Gale", discord.Color.from_rgb(22, 160, 133)),
+        ("Rain", discord.Color.from_rgb(52, 152, 219)),
+        ("Drizzle", discord.Color.from_rgb(93, 173, 226)),
+        ("Windy", discord.Color.from_rgb(26, 188, 156)),
+        ("Dry", discord.Color.from_rgb(243, 156, 18)),
+    ]
+
+    results = []
+    for r_name, r_color in roles_to_create:
+        match = discord.utils.get(guild.roles, name=r_name)
+        if match:
+            results.append(f"• **{match.name}**: `<@&{match.id}>` (ID: `{match.id}`)")
+        else:
+            try:
+                new_role = await guild.create_role(name=r_name, color=r_color, mentionable=True)
+                results.append(f"• ✨ **{new_role.name}**: `<@&{new_role.id}>` (ID: `{new_role.id}`)")
+            except Exception as e:
+                results.append(f"• ❌ **{r_name}**: {e}")
+
+    embed = discord.Embed(
+        title="🎭 BMKG Weather Roles Setup",
+        description="\n".join(results),
+        color=0x2ECC71
+    )
+    await ctx.send(embed=embed)
+
 @bot.event
 async def on_ready():
     print(f"[BMKG Bot] Logged in as {bot.user} (ID: {bot.user.id})")
