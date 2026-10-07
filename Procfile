@@ -1,1 +1,2 @@
-web: gunicorn cloud_app:app --bind 0.0.0.0:$PORT
+web: python run_cloud.py
+

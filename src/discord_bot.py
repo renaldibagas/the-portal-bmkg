@@ -535,10 +535,12 @@ async def on_ready():
             print(f"[BMKG Bot] Slash sync error: {e}")
 
 def run_discord_bot():
-    if not DISCORD_BOT_TOKEN:
-        print("[BMKG Bot] ⚠️ DISCORD_BOT_TOKEN not provided in environment.")
+    token = get_bot_token() or DISCORD_BOT_TOKEN
+    if not token:
+        print("[BMKG Bot] ⚠️ DISCORD_BOT token not provided in environment.")
         return
-    bot.run(DISCORD_BOT_TOKEN)
+    print(f"[BMKG Bot] Connecting to Discord Gateway with token ({token[:6]}...)...")
+    bot.run(token)
 
 if __name__ == "__main__":
     run_discord_bot()
