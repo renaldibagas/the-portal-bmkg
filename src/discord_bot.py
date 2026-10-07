@@ -302,11 +302,21 @@ if HAS_SLASH_TREE:
     async def slash_weather(interaction: discord.Interaction):
         await interaction.response.defer()
         
+        # Get interaction placeholder message so we never delete our own response
+        resp_msg_id = None
+        try:
+            resp_msg = await interaction.original_response()
+            if resp_msg:
+                resp_msg_id = resp_msg.id
+        except Exception:
+            pass
+
         # Purge other channel messages if bot has permission
         if interaction.channel:
             try:
-                # Delete messages except interaction
                 async for msg in interaction.channel.history(limit=50):
+                    if resp_msg_id and msg.id == resp_msg_id:
+                        continue
                     try:
                         await msg.delete()
                         await asyncio.sleep(0.1)
