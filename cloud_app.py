@@ -131,12 +131,8 @@ def handle_weather():
         content = f"📢 **{alert_reason}!** {role_ping}" if role_ping else ""
 
         embed = {
-            "title": "📡 THE PORTAL OBSERVATORY • BMKG WEATHER RADAR",
-            "description": payload.get("description", f"Live forecast generated for **{payload.get('weather_display', 'The Portal')}**"),
             "color": payload.get("color", 0x3498DB),
-            "image": {"url": "attachment://weather_card.png"},
-            "footer": {"text": "Badan Meteorologi Klimatologi dan Gacha (BMKG) • Cloud Satellite Radar"},
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            "image": {"url": "attachment://weather_card.png"}
         }
 
         discord_payload = {

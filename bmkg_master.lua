@@ -781,7 +781,11 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                     local sDec, decData = pcall(HttpService.JSONDecode, HttpService, resBody)
                     if sDec and decData and decData.image_url then
                         print("[BMKG Cloud] ✅ Card successfully attached: " .. tostring(decData.image_url))
-                        payload.embeds[1].image = { url = decData.image_url }
+                        -- Pure visual card presentation: render only the image card (removes text redundancy)
+                        payload.embeds = {{
+                            color = embedColor,
+                            image = { url = decData.image_url }
+                        }}
                         lastCloudPing = os.time()
                     else
                         print("[BMKG Cloud] ⚠️ Decode error or missing image_url (Code " .. tostring(resCode) .. "): " .. tostring(resBody))
