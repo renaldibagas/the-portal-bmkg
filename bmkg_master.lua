@@ -52,19 +52,21 @@ local lastCloudPing   = 0
 local lastCardWeather = nil
 local lastCardUrl     = nil
 
--- Weather-Specific Role Mappings (Shop Price Grouped)
+-- Weather-Specific Role Mappings (Newly Created POTATO Server Roles)
 local WEATHER_ROLES = {
-    ["Snow"]          = "1541024386906066994", -- +20% Shop Price
-    ["HeavyRain"]     = "1541024787118297240", -- +10% Shop Price
-    ["Gale"]          = "1541034129636851842", -- +10% Shop Price
-    ["NormalRain"]    = "1541024491235315812", -- +5% Shop Price
-    ["Rain"]          = "1541024491235315812", -- +5% Shop Price
-    ["Drizzle"]       = "1541024491235315812", -- +5% Shop Price
-    ["Windy"]         = "1541024491235315812", -- +5% Shop Price
-    ["NorthernLights"]= "1541024491235315812", -- Aurora Event / Buffs
-    ["Nightmare"]     = "1541024678456463432", -- Abyssal Hazard
-    ["PortalEclipse"] = "1541024678456463432"  -- Event / Boss
+    ["NorthernLights"]= "1557371108032913521", -- Northern Lights (Aurora & Upgrade)
+    ["Nightmare"]     = "1557371110193106954", -- Nightmare (Blood Moon & EXP)
+    ["PortalEclipse"] = "1557371112357367849", -- Portal Eclipse (Rift & Boss)
+    ["Snow"]          = "1557371115024941056", -- Snow (+20% Shop Surcharge)
+    ["HeavyRain"]     = "1557371120422883411", -- Heavy Rain (+10% Shop Surcharge)
+    ["Gale"]          = "1557371122318708857", -- Gale (+10% Shop Surcharge)
+    ["NormalRain"]    = "1557371124222787594", -- Rain (+5% Shop & Auto-Water)
+    ["Rain"]          = "1557371124222787594", -- Rain (+5% Shop & Auto-Water)
+    ["Drizzle"]       = "1557371125971820554", -- Drizzle (+5% Shop & Auto-Water)
+    ["Windy"]         = "1557371127326572579", -- Windy (+5% Shop & Wind Modifiers)
+    ["Dry"]           = "1557371128920547460"  -- Dry (Sunny & Normal Prices)
 }
+local ECLIPSE_ROLE_ID = "1557371112357367849"
 
 local SLOT_ROLL_HOURS = {
     [1] = "4:00 AM",
@@ -704,11 +706,16 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
         content = currentActiveHeader,
         allowed_mentions = {
             roles = {
-                "1541024386906066994",
-                "1541024787118297240",
-                "1541034129636851842",
-                "1541024491235315812",
-                "1541024678456463432"
+                "1557371108032913521",
+                "1557371110193106954",
+                "1557371112357367849",
+                "1557371115024941056",
+                "1557371120422883411",
+                "1557371122318708857",
+                "1557371124222787594",
+                "1557371125971820554",
+                "1557371127326572579",
+                "1557371128920547460"
             }
         },
         embeds = {{
