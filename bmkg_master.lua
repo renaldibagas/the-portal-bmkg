@@ -761,22 +761,38 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                 odds = oddsTuples
             }
 
-            pcall(function()
+            print("[BMKG Cloud] 📡 Requesting Anime Weather Card from Cloud (" .. tostring(rawWeather) .. ")...")
+            local cloudOk, cloudErr = pcall(function()
                 local cRes = httpRequest({
                     Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
+                    url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
                     Method = "POST",
+                    method = "POST",
                     Headers = { ["Content-Type"] = "application/json" },
-                    Body = HttpService:JSONEncode(cloudPayload)
+                    headers = { ["Content-Type"] = "application/json" },
+                    Body = HttpService:JSONEncode(cloudPayload),
+                    body = HttpService:JSONEncode(cloudPayload),
+                    Timeout = 30,
+                    timeout = 30
                 })
-                if cRes and cRes.Body then
-                    local sDec, decData = pcall(HttpService.JSONDecode, HttpService, cRes.Body)
+                local resBody = cRes and (cRes.Body or cRes.body)
+                local resCode = cRes and (cRes.StatusCode or cRes.status or cRes.statusCode or 0)
+                if resBody then
+                    local sDec, decData = pcall(HttpService.JSONDecode, HttpService, resBody)
                     if sDec and decData and decData.image_url then
-                        -- Attach the high-resolution generated anime card to the Discord embed
+                        print("[BMKG Cloud] ✅ Card successfully attached: " .. tostring(decData.image_url))
                         payload.embeds[1].image = { url = decData.image_url }
                         lastCloudPing = os.time()
+                    else
+                        print("[BMKG Cloud] ⚠️ Decode error or missing image_url (Code " .. tostring(resCode) .. "): " .. tostring(resBody))
                     end
+                else
+                    print("[BMKG Cloud] ⚠️ Cloud returned no body (Code: " .. tostring(resCode) .. ")")
                 end
             end)
+            if not cloudOk then
+                print("[BMKG Cloud] ❌ HTTP Exception: " .. tostring(cloudErr))
+            end
         end
             if forceNewMessage or targetRoleId then
                 if lastMessageId then

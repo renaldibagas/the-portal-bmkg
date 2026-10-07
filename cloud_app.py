@@ -42,13 +42,13 @@ def render_and_upload():
         payload = request.get_json(force=True) or {}
         img = generator.render(payload)
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        img.convert("RGB").save(buf, format="JPEG", quality=90)
         buf.seek(0)
         img_bytes = buf.getvalue()
 
         tmp_res = requests.post(
             "https://tmpfiles.org/api/v1/upload",
-            files={"file": ("weather_card.png", img_bytes, "image/png")},
+            files={"file": ("weather_card.jpg", img_bytes, "image/jpeg")},
             timeout=25
         )
         if tmp_res.status_code == 200:
