@@ -24,8 +24,11 @@ generator = WeatherCardGenerator()
 # 24/7 CLOUD DISCORD BOT THREAD (Runs automatically on Render / Gunicorn)
 # -----------------------------------------------------------------
 _bot_started = False
+_bot_error = None
+_bot_instance_ref = None
+
 def init_cloud_discord_bot():
-    global _bot_started
+    global _bot_started, _bot_error, _bot_instance_ref
     if _bot_started:
         return
     bot_token = os.environ.get("DISCORD_BOT_TOKEN")
@@ -43,20 +46,27 @@ def init_cloud_discord_bot():
         _bot_started = True
         import threading
         def run_bot_worker():
+            global _bot_error, _bot_instance_ref
             import asyncio
             try:
                 from src.discord_bot import bot as discord_bot_instance
+                _bot_instance_ref = discord_bot_instance
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(discord_bot_instance.start(bot_token))
             except Exception as be:
-                print(f"[Cloud Error] Discord Bot runner error: {be}")
+                import traceback
+                _bot_error = f"{be}\n{traceback.format_exc()}"
+                print(f"[Cloud Error] Discord Bot runner error: {_bot_error}")
 
-        t = threading.Thread(target=run_bot_worker, daemon=True)
+        t = threading.Thread(target=run_bot_worker, daemon=True, name="DiscordBotThread")
         t.start()
         print("[Cloud] 🚀 Discord Bot (Slash Commands & Reaction Roles) launched 24/7 on Render!")
+    else:
+        _bot_error = "DISCORD_BOT_TOKEN environment variable is not set."
 
 init_cloud_discord_bot()
+
 
 def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
     ua_headers = {
@@ -94,11 +104,28 @@ def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
 
 @app.route("/", methods=["GET"])
 def health():
+    bot_ready = False
+    bot_user = None
+    if _bot_instance_ref is not None:
+        try:
+            bot_ready = _bot_instance_ref.is_ready()
+            if _bot_instance_ref.user:
+                bot_user = str(_bot_instance_ref.user)
+        except Exception:
+            pass
+
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.5.0-direct-cdn",
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        "version": "2.5.1-direct-cdn",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "bot": {
+            "has_token": bool(os.environ.get("DISCORD_BOT_TOKEN")),
+            "started": _bot_started,
+            "ready": bot_ready,
+            "user": bot_user,
+            "error": _bot_error
+        }
     })
 
 @app.route("/cards/<filename>", methods=["GET"])
