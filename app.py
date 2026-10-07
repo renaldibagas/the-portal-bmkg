@@ -11,8 +11,7 @@ from PIL import Image
 from src.weather_card_generator import WeatherCardGenerator
 
 # 1. Initialize Generator & Fast Webhook Dispatcher
-DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1540322408672534558/4UCzxOUqPmWeE-GYbWZ0ebZmyFB0ewE4dTZZziInsfZwnOzVJ9A4wXNO0dIdUfJzX7fC"
-WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", DEFAULT_WEBHOOK)
+WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 generator = WeatherCardGenerator()
 
 # 2. FastAPI Backend (Receives requests from Roblox 24/7)

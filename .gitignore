@@ -14,7 +14,8 @@ debug_*.png
 live_hover_test_capture.png
 ocr_detection_area_preview.png
 
-# Environment
+# Environment & Secrets
 .env
 venv/
 env/
+*.lua

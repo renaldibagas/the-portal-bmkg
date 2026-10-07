@@ -14,9 +14,8 @@ app = Flask(__name__)
 CARDS_DIR = os.path.join(tempfile.gettempdir(), "bmkg_cards")
 os.makedirs(CARDS_DIR, exist_ok=True)
 
-# Discord Webhook (configured via Environment Variable or default fallback)
-DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1540322408672534558/4UCzxOUqPmWeE-GYbWZ0ebZmyFB0ewE4dTZZziInsfZwnOzVJ9A4wXNO0dIdUfJzX7fC"
-WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", DEFAULT_WEBHOOK)
+# Discord Webhook (configured via Environment Variable or local .env)
+WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 generator = WeatherCardGenerator()
 
