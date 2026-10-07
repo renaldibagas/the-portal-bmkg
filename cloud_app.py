@@ -21,12 +21,16 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", DEFAULT_WEBHOOK)
 generator = WeatherCardGenerator()
 
 def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
+    ua_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    }
     # 1. Primary: Catbox.moe (Direct static image CDN with permanent hosting & full Discord crawler support)
     try:
         r = requests.post(
             "https://catbox.moe/user/api.php",
             data={"reqtype": "fileupload"},
             files={"fileToUpload": (base_name, img_bytes, "image/jpeg")},
+            headers=ua_headers,
             timeout=12
         )
         if r.status_code == 200 and r.text.startswith("https://files.catbox.moe/"):
@@ -40,27 +44,13 @@ def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
             "https://litterbox.catbox.moe/resources/internals/api.php",
             data={"reqtype": "fileupload", "time": "72h"},
             files={"fileToUpload": (base_name, img_bytes, "image/jpeg")},
+            headers=ua_headers,
             timeout=12
         )
         if r.status_code == 200 and r.text.startswith("https://litter.catbox.moe/"):
             return r.text.strip()
     except Exception as e:
         print(f"[CDN] Litterbox upload error: {e}")
-
-    # 3. Third-party fallback: tmpfiles.org
-    try:
-        tmp_res = requests.post(
-            "https://tmpfiles.org/api/v1/upload",
-            files={"file": (base_name, img_bytes, "image/jpeg")},
-            timeout=15
-        )
-        if tmp_res.status_code == 200:
-            res_data = tmp_res.json()
-            raw_url = res_data.get("data", {}).get("url", "")
-            if raw_url:
-                return raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-    except Exception as e:
-        print(f"[CDN] tmpfiles upload error: {e}")
 
     return None
 
@@ -69,7 +59,7 @@ def health():
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.4.0-catbox",
+        "version": "2.4.1-catbox-direct",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
 
@@ -80,7 +70,7 @@ def serve_card(filename):
 @app.route("/api/card/upload", methods=["POST"])
 def render_and_upload():
     """
-    Renders the anime weather card and uploads it to CDN (Catbox / Litterbox / Render fallback).
+    Renders the anime weather card and uploads it to CDN (Catbox / Litterbox / Render direct).
     Returns direct image URL that Discord embeds immediately with full dimensions!
     """
     try:
@@ -95,6 +85,11 @@ def render_and_upload():
         file_id = f"card_{uuid.uuid4().hex[:10]}.jpg"
         local_path = os.path.join(CARDS_DIR, file_id)
         with open(local_path, "wb") as f:
+            f.write(img_bytes)
+
+        # Also save latest.jpg
+        latest_path = os.path.join(CARDS_DIR, "latest.jpg")
+        with open(latest_path, "wb") as f:
             f.write(img_bytes)
 
         # Upload to CDN for fastest Discord unfurling
