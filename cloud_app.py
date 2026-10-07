@@ -101,7 +101,10 @@ def handle_weather():
                     
                     # Dispatch to Discord via Roblox-approved proxy
                     proxy_url = target_webhook.replace("https://discord.com", "https://webhook.lewisakura.moe")
-                    p_res = requests.post(proxy_url, json=discord_payload, timeout=15)
+                    browser_headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    }
+                    p_res = requests.post(proxy_url, json=discord_payload, headers=browser_headers, timeout=15)
                     print(f"[Cloud] Proxy response: {p_res.status_code}")
                     if p_res.status_code in (200, 204):
                         return jsonify({"success": True, "message": "Weather card delivered via CDN Proxy!", "cdn_url": direct_img_url})
