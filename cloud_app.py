@@ -81,27 +81,36 @@ def handle_weather():
 
         # 2. Resilient fallback: Upload card to Catbox and dispatch via Discord proxy
         # (Bypasses Cloudflare Error 1015 datacenter IP rate limits on Render)
+        fallback_error = "Unknown"
         try:
             print("[Cloud] Direct Discord blocked. Using Catbox CDN + Webhook Proxy fallback...")
             cat_res = requests.post(
                 "https://catbox.moe/user/api.php",
                 data={"reqtype": "fileupload"},
                 files={"fileToUpload": ("weather_card.png", img_bytes, "image/png")},
-                timeout=15
+                timeout=20
             )
-            if cat_res.status_code == 200 and cat_res.text.startswith("http"):
+            print(f"[Cloud] Catbox upload response: {cat_res.status_code} -> {cat_res.text[:80]}")
+            if cat_res.status_code == 200 and cat_res.text.strip().startswith("http"):
                 hosted_url = cat_res.text.strip()
                 embed["image"] = {"url": hosted_url}
+                discord_payload["embeds"] = [embed]
                 
                 # Send via reliable Roblox/Discord proxy or target webhook
                 proxy_url = target_webhook.replace("https://discord.com", "https://webhook.lewisakura.moe")
                 p_res = requests.post(proxy_url, json=discord_payload, timeout=15)
+                print(f"[Cloud] Proxy response: {p_res.status_code}")
                 if p_res.status_code in (200, 204):
                     return jsonify({"success": True, "message": "Weather card delivered via CDN Proxy!", "cdn_url": hosted_url})
+                else:
+                    fallback_error = f"Proxy error {p_res.status_code}: {p_res.text}"
+            else:
+                fallback_error = f"Catbox upload failed: {cat_res.status_code} -> {cat_res.text}"
         except Exception as e:
+            fallback_error = f"Fallback exception: {str(e)}"
             print(f"[Error] Fallback delivery failed: {e}")
 
-        return jsonify({"success": False, "message": "Could not deliver card to Discord"}), 502
+        return jsonify({"success": False, "message": "Could not deliver card to Discord", "detail": fallback_error}), 502
 
     except Exception as e:
         print(f"[Error] Failed to render card: {e}")
