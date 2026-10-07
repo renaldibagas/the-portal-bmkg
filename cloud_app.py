@@ -20,6 +20,44 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", DEFAULT_WEBHOOK)
 
 generator = WeatherCardGenerator()
 
+# -----------------------------------------------------------------
+# 24/7 CLOUD DISCORD BOT THREAD (Runs automatically on Render / Gunicorn)
+# -----------------------------------------------------------------
+_bot_started = False
+def init_cloud_discord_bot():
+    global _bot_started
+    if _bot_started:
+        return
+    bot_token = os.environ.get("DISCORD_BOT_TOKEN")
+    if not bot_token:
+        # Check local .env fallback
+        env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("DISCORD_BOT_TOKEN="):
+                        bot_token = line.strip().split("=", 1)[1].strip("\"'")
+                        break
+
+    if bot_token:
+        _bot_started = True
+        import threading
+        def run_bot_worker():
+            import asyncio
+            try:
+                from src.discord_bot import bot as discord_bot_instance
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(discord_bot_instance.start(bot_token))
+            except Exception as be:
+                print(f"[Cloud Error] Discord Bot runner error: {be}")
+
+        t = threading.Thread(target=run_bot_worker, daemon=True)
+        t.start()
+        print("[Cloud] 🚀 Discord Bot (Slash Commands & Reaction Roles) launched 24/7 on Render!")
+
+init_cloud_discord_bot()
+
 def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
     ua_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
