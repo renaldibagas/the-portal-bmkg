@@ -868,7 +868,6 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
             end
         end
     end
-end
 
 -- ============================================================
 -- 8. EVENT LISTENER & ACTIVE WATCHDOG LOOP
