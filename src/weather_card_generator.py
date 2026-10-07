@@ -684,7 +684,15 @@ class WeatherCardGenerator:
         
         # Weather Condition Display & Weather Vector Icon
         cond_text = data.get("weather_display", "Drizzle • Gentle Rain")
-        draw.text(((left_x0 + left_x1) // 2, left_y0 + 265), cond_text, font=self.font_hero_cond, fill=(255, 255, 255, 250), anchor="mt")
+        hero_cx = (left_x0 + left_x1) // 2
+        try:
+            bbox = self.font_hero_cond.getbbox(cond_text)
+            tw = bbox[2] - bbox[0]
+        except Exception:
+            tw = len(cond_text) * 18
+        icon_cx = hero_cx - (tw // 2) - 24
+        self._draw_weather_icon(draw, icon_cx, left_y0 + 282, weather_type, size=32)
+        draw.text((hero_cx + 16, left_y0 + 265), cond_text, font=self.font_hero_cond, fill=(255, 255, 255, 250), anchor="mt")
         
         # Season Badge Box
         season_y0 = left_y0 + 330
@@ -708,6 +716,9 @@ class WeatherCardGenerator:
         draw.text((left_x0 + 60, portal_y0 + 26), "DIMENSIONAL RIFT • LYCAROS RAID", font=self.font_title, fill=(215, 175, 255, 255))
         
         portal_time = data.get('portal_time_str', 'Opening in 2 days 10 hours')
+        # Clean Discord timestamp tags if present in string (e.g. (<t:179157...>) so it doesn't overflow)
+        import re
+        portal_time = re.sub(r'\s*\(\<t:\d+:[a-zA-Z]\>\)', '', portal_time).strip()
         draw.text((left_x0 + 60, portal_y0 + 72), f"Gate Status: {portal_time}", font=self.font_body_bold, fill=(255, 255, 255, 245))
         draw.text((left_x0 + 60, portal_y0 + 112), "Weekly Boss Lycaros: Fixed Sunday 04:00 AM & 04:00 PM", font=self.font_body, fill=(230, 210, 255, 230))
         draw.text((left_x0 + 60, portal_y0 + 152), "Rift Mutations: 2.65x Shadow Mutations every 120s (Rare)", font=self.font_body, fill=(255, 225, 140, 235))
