@@ -699,19 +699,19 @@ class WeatherCardGenerator:
         season_desc = f"Day {season_day} of 4 • Weather Slot {slot_idx} of 6 (Rolls every 2 Hours)"
         draw.text(((left_x0 + left_x1) // 2, season_y0 + 58), season_desc, font=self.font_body, fill=theme["sub_text"], anchor="mt")
 
-        # Dewdrop Portal & Dimensional Rift Card (Prominent lower half of Left Panel)
+        # Dewdrop Portal & Lycaros Boss Raid Card (Prominent lower half of Left Panel)
         portal_y0 = left_y1 - 340
         portal_y1 = left_y1 - 35
         self._draw_glass_card(img, left_x0 + 35, portal_y0, left_x1 - 35, portal_y1, radius=24,
                               fill_color=(18, 12, 38, 225), border_color=(185, 120, 255, 140), blur_radius=16)
         draw = ImageDraw.Draw(img)
-        draw.text((left_x0 + 60, portal_y0 + 26), "🌀 DIMENSIONAL RIFT • DEWDROP PORTAL", font=self.font_title, fill=(215, 175, 255, 255))
+        draw.text((left_x0 + 60, portal_y0 + 26), "DIMENSIONAL RIFT • LYCAROS RAID", font=self.font_title, fill=(215, 175, 255, 255))
         
         portal_time = data.get('portal_time_str', 'Opening in 2 days 10 hours')
         draw.text((left_x0 + 60, portal_y0 + 72), f"Gate Status: {portal_time}", font=self.font_body_bold, fill=(255, 255, 255, 245))
-        draw.text((left_x0 + 60, portal_y0 + 112), "🛡️ Siapkan mental & gear terbaik! (Potions & armor ready)", font=self.font_body, fill=(230, 210, 255, 230))
-        draw.text((left_x0 + 60, portal_y0 + 152), "⚔️ Mythic Boss Raid, Shadow Mutations & Ancient Dewdrops", font=self.font_body, fill=(255, 225, 140, 235))
-        draw.text((left_x0 + 60, portal_y0 + 192), "🔮 Server-wide synchronized rift across all realms", font=self.font_small, fill=theme["sub_text"])
+        draw.text((left_x0 + 60, portal_y0 + 112), "Weekly Boss Lycaros: Fixed Sunday 04:00 AM & 04:00 PM", font=self.font_body, fill=(230, 210, 255, 230))
+        draw.text((left_x0 + 60, portal_y0 + 152), "Rift Mutations: 2.65x Shadow Mutations every 120s (Rare)", font=self.font_body, fill=(255, 225, 140, 235))
+        draw.text((left_x0 + 60, portal_y0 + 192), "Fish Biting: 100% Universal All-Fish active during Eclipse", font=self.font_small, fill=theme["sub_text"])
 
         # =============================================================
         # RIGHT PANEL (Hourly Forecast, Active Modifiers, Gacha Odds)
