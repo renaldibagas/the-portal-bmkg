@@ -1,4 +1,5 @@
-gradio>=4.38.0
-fastapi>=0.110.0
+pywin32>=306
+winocr>=0.0.15
+pillow>=10.0.0
 requests>=2.31.0
-pillow>=9.5.0
+opencv-python-headless>=4.8.0

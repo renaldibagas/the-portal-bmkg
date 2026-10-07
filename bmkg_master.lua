@@ -887,7 +887,7 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                             Method = "DELETE"
                         })
                     end)
-                    task.wait(0.3)
+                    task.wait(0.5)
                 end
 
                 local response = httpRequest({
@@ -913,6 +913,7 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                     end
                 end
             else
+                local patched = false
                 if lastMessageId then
                     local patchResponse = httpRequest({
                         Url = DISCORD_WEBHOOK .. "/messages/" .. tostring(lastMessageId),
@@ -920,30 +921,13 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                         Headers = { ["Content-Type"] = "application/json" },
                         Body = HttpService:JSONEncode(payload)
                     })
-                    if not (patchResponse and patchResponse.StatusCode == 200) then
-                        local response = httpRequest({
-                            Url = DISCORD_WEBHOOK .. "?wait=true",
-                            Method = "POST",
-                            Headers = { ["Content-Type"] = "application/json" },
-                            Body = HttpService:JSONEncode(payload)
-                        })
-                        if response and response.Body then
-                            local successDecode, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
-                            if successDecode and data and data.id then
-                                lastMessageId = data.id
-                                saveState({
-                                    messageId = data.id,
-                                    weather = rawWeather,
-                                    season = season,
-                                    day = day,
-                                    slot = slotIndex,
-                                    activeHeader = currentActiveHeader,
-                                    timestamp = os.time()
-                                })
-                            end
-                        end
+                    if patchResponse and (patchResponse.StatusCode == 200 or patchResponse.statusCode == 200 or patchResponse.Status == 200) then
+                        patched = true
                     end
-                else
+                end
+
+                -- Fallback to POST only if PATCH failed and we haven't already posted recently for this exact weather
+                if not patched then
                     local response = httpRequest({
                         Url = DISCORD_WEBHOOK .. "?wait=true",
                         Method = "POST",
