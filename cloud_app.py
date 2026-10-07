@@ -96,6 +96,14 @@ def render_and_upload():
         with open(latest_path, "wb") as f:
             f.write(img_bytes)
 
+        # Persist latest telemetry payload so Discord slash commands have real-time game data
+        try:
+            state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmkg_latest_state.json")
+            with open(state_file, "w", encoding="utf-8") as sf:
+                json.dump(payload, sf, indent=2)
+        except Exception as se:
+            print(f"[Warning] Failed to save latest telemetry: {se}")
+
         # Host URL (auto-detect or default to official Render domain)
         host_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://the-portal-bmkg.onrender.com"
         card_url = f"{host_url.rstrip('/')}/cards/{file_id}"
@@ -206,5 +214,22 @@ def handle_weather():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
+    # If DISCORD_BOT_TOKEN is provided, launch Discord Slash Bot concurrently in background thread
+    bot_token = os.environ.get("DISCORD_BOT_TOKEN")
+    if bot_token:
+        import threading
+        try:
+            from src.discord_bot import bot as discord_bot_instance
+            def start_bot():
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(discord_bot_instance.start(bot_token))
+            t = threading.Thread(target=start_bot, daemon=True)
+            t.start()
+            print("[Cloud] 🤖 Discord Slash Command Bot started in background thread!")
+        except Exception as be:
+            print(f"[Warning] Could not start Discord Slash Bot: {be}")
+
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
