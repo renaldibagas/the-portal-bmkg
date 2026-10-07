@@ -1,0 +1,4 @@
+gradio>=4.38.0
+fastapi>=0.110.0
+requests>=2.31.0
+pillow>=9.5.0
