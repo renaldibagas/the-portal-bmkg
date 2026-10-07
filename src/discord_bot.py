@@ -50,6 +50,7 @@ LATEST_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 HAS_SLASH_TREE = hasattr(discord, "app_commands") and app_commands is not None
 
 intents = discord.Intents.default()
+intents.members = True
 if hasattr(intents, "message_content"):
     intents.message_content = True
 
@@ -436,6 +437,77 @@ async def cmd_prefix_createroles(ctx):
         color=0x2ECC71
     )
     await ctx.send(embed=embed)
+
+# ============================================================
+# REACTION ROLE ENGINE (Auto Add/Remove on Click)
+# ============================================================
+REACTION_ROLE_MSG_ID = 1557380895680364615
+WEATHER_EMOJI_TO_ROLE = {
+    '🌌': 1557371108032913521, # Northern Lights
+    '🩸': 1557371110193106954, # Nightmare
+    '🌀': 1557371112357367849, # Portal Eclipse
+    '❄️': 1557371115024941056, # Snow
+    '⛈️': 1557371120422883411, # Heavy Rain
+    '🌪️': 1557371122318708857, # Gale
+    '🌧️': 1557371124222787594, # Rain
+    '🌦️': 1557371125971820554, # Drizzle
+    '🍃': 1557371127326572579, # Windy
+    '☀️': 1557371128920547460, # Dry
+}
+
+@bot.event
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    if payload.message_id != REACTION_ROLE_MSG_ID:
+        return
+    if payload.user_id == bot.user.id:
+        return
+
+    emoji_str = str(payload.emoji.name)
+    role_id = WEATHER_EMOJI_TO_ROLE.get(emoji_str)
+    if not role_id:
+        return
+
+    guild = bot.get_guild(payload.guild_id)
+    if not guild:
+        return
+
+    role = guild.get_role(role_id)
+    member = payload.member or guild.get_member(payload.user_id)
+    if role and member:
+        try:
+            await member.add_roles(role, reason="BMKG Reaction Role Added")
+            print(f"[Role +] Added {role.name} to {member.display_name}")
+        except Exception as e:
+            print(f"[Role Error] Could not add role {role.name}: {e}")
+
+@bot.event
+async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent):
+    if payload.message_id != REACTION_ROLE_MSG_ID:
+        return
+
+    emoji_str = str(payload.emoji.name)
+    role_id = WEATHER_EMOJI_TO_ROLE.get(emoji_str)
+    if not role_id:
+        return
+
+    guild = bot.get_guild(payload.guild_id)
+    if not guild:
+        return
+
+    role = guild.get_role(role_id)
+    member = guild.get_member(payload.user_id)
+    if not member:
+        try:
+            member = await guild.fetch_member(payload.user_id)
+        except Exception:
+            member = None
+
+    if role and member:
+        try:
+            await member.remove_roles(role, reason="BMKG Reaction Role Removed")
+            print(f"[Role -] Removed {role.name} from {member.display_name}")
+        except Exception as e:
+            print(f"[Role Error] Could not remove role {role.name}: {e}")
 
 @bot.event
 async def on_ready():
