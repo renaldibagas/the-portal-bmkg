@@ -4,7 +4,7 @@ import random
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 class WeatherCardGenerator:
-    def __init__(self, width: int = 1080, height: int = 1680, bg_dir: str = None):
+    def __init__(self, width: int = 1600, height: int = 900, bg_dir: str = None):
         self.width = width
         self.height = height
         if bg_dir is None:
@@ -650,308 +650,262 @@ class WeatherCardGenerator:
                 self._draw_sun_flare(img)
                 self._draw_fluffy_clouds(img, True)
 
-        # -------------------------------------------------------------
-        # 1. TOP HEADER & HERO METRICS
-        # -------------------------------------------------------------
-        realm_name = "THE PORTAL REALM"
-        location_sub = f"BMKG Observatory • Server [{data.get('server_id', 'Online')[:8]}]"
-        
-        draw.text((self.width // 2, 65), realm_name, font=self.font_hero_cond, fill=(255, 255, 255, 245), anchor="mt")
-        draw.text((self.width // 2, 112), location_sub, font=self.font_hero_sub, fill=theme["sub_text"], anchor="mt")
-
-        temp_str = data.get("temp_display", "31°")
-        draw.text((self.width // 2, 155), temp_str, font=self.font_hero_temp, fill=(255, 255, 255, 255), anchor="mt")
-        
-        cond_str = data.get("weather_display", "Dry • Mostly Clear")
-        high_low = f"Season: {data.get('season', 'Spring')} (Day {data.get('season_day', 1)}/4) • Slot {data.get('slot_index', 3)}/6"
-        draw.text((self.width // 2, 275), cond_str, font=self.font_hero_cond, fill=(255, 255, 255, 250), anchor="mt")
-        draw.text((self.width // 2, 325), high_low, font=self.font_hero_sub, fill=theme["sub_text"], anchor="mt")
-
-        # -------------------------------------------------------------
-        # 2. HOURLY FORECAST CAPSULE PILLS
-        # -------------------------------------------------------------
-        card_y0 = 375
-        card_y1 = 665
-        self._draw_glass_card(img, 40, card_y0, self.width - 40, card_y1, radius=32, 
+        # =============================================================
+        # LEFT PANEL (Hero, Celestial Orbit, Portal Countdown)
+        # Dimensions: x0: 30, y0: 30, x1: 710, y1: 870
+        # =============================================================
+        left_x0, left_y0, left_x1, left_y1 = 30, 30, 710, 870
+        self._draw_glass_card(img, left_x0, left_y0, left_x1, left_y1, radius=28,
                               fill_color=theme["card_fill"], border_color=theme["card_border"])
         draw = ImageDraw.Draw(img)
 
-        draw.text((70, card_y0 + 20), "Hourly Weather Forecast", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((self.width - 70, card_y0 + 26), "Rolls every 2 Real Hours", font=self.font_small, fill=theme["sub_text"], anchor="ra")
+        # Header
+        draw.text(((left_x0 + left_x1) // 2, left_y0 + 24), "THE PORTAL REALM", font=self.font_hero_cond, fill=(255, 255, 255, 255), anchor="mt")
+        loc_sub = f"BMKG Observatory • Server: [{data.get('server_id', 'Online')[:8]}]"
+        draw.text(((left_x0 + left_x1) // 2, left_y0 + 64), loc_sub, font=self.font_hero_sub, fill=theme["sub_text"], anchor="mt")
 
-        slots = data.get("hourly_slots", [
-            {"time": "04 AM", "icon": "Dry", "temp": "28°", "temp_num": 28, "prob": "35%", "is_active": False},
-            {"time": "08 AM", "icon": "NorthernLights", "temp": "29°", "temp_num": 29, "prob": "22%", "is_active": False},
-            {"time": "Now",   "icon": weather_type, "temp": "31°", "temp_num": 31, "prob": "Live", "is_active": True},
-            {"time": "04 PM", "icon": "Nightmare", "temp": "30°", "temp_num": 30, "prob": "12%", "is_active": False},
-            {"time": "08 PM", "icon": "Rain", "temp": "26°", "temp_num": 26, "prob": "20%", "is_active": False},
-            {"time": "12 AM", "icon": "Night", "temp": "24°", "temp_num": 24, "prob": "8%",  "is_active": False},
-        ])
+        # Giant Temperature & Icon
+        temp_val = data.get("temp_display", "31°")
+        draw.text(((left_x0 + left_x1) // 2, left_y0 + 95), temp_val, font=self.font_hero_temp, fill=(255, 255, 255, 255), anchor="mt")
+        
+        # Weather Display & Season
+        cond_text = data.get("weather_display", "Drizzle • Gentle Rain")
+        draw.text(((left_x0 + left_x1) // 2, left_y0 + 215), cond_text, font=self.font_hero_cond, fill=(255, 255, 255, 250), anchor="mt")
+        season_sub = f"Season: {data.get('season', 'Summer')} (Day {data.get('season_day', 1)}/4) • Slot {data.get('slot_index', 1)}/6"
+        draw.text(((left_x0 + left_x1) // 2, left_y0 + 260), season_sub, font=self.font_hero_sub, fill=theme["sub_text"], anchor="mt")
 
-        pill_width = 142
-        pill_gap = 18
-        start_x = (self.width - (len(slots) * pill_width + (len(slots) - 1) * pill_gap)) // 2
-        pill_y0 = card_y0 + 65
-        pill_y1 = card_y1 - 30
+        # Celestial Sun / Moon Arc
+        arc_cx = (left_x0 + left_x1) // 2
+        arc_cy = left_y0 + 485
+        arc_rx = 270
+        arc_ry = 95
+        
+        draw.text((left_x0 + 35, left_y0 + 310), "In-Game Celestial Orbit & Clock", font=self.font_title, fill=(255, 255, 255, 245))
+        clock_line = f"Clock: {data.get('in_game_clock', '4:45 AM')} (Rolls at {data.get('target_roll_hour', '8:00 AM')})"
+        draw.text((left_x0 + 35, left_y0 + 342), clock_line, font=self.font_body, fill=theme["sub_text"])
 
-        for i, s in enumerate(slots):
-            px0 = start_x + i * (pill_width + pill_gap)
-            px1 = px0 + pill_width
-            is_active = s.get("is_active", False)
-
-            if is_active:
-                self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=24, 
-                                      fill_color=theme["pill_active_fill"], border_color=theme["pill_active_border"])
-            else:
-                self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=24, 
-                                      fill_color=theme["pill_inactive_fill"], border_color=theme["card_border"])
-            
-            draw = ImageDraw.Draw(img)
-            cx = (px0 + px1) // 2
-            
-            # Time Label
-            time_col = (255, 255, 255, 255) if is_active else (210, 225, 255, 205)
-            draw.text((cx, pill_y0 + 16), s["time"], font=self.font_pill_time, fill=time_col, anchor="mt")
-
-            # Icon
-            icon_key = s.get("icon", "Dry")
-            self._draw_weather_icon(draw, cx, pill_y0 + 64, icon_key, size=34)
-
-            # Prob
-            prob_str = s.get("prob", "0%")
-            prob_col = (130, 240, 255, 255) if is_active else (170, 210, 255, 185)
-            draw.text((cx, pill_y0 + 94), prob_str, font=self.font_small, fill=prob_col, anchor="mt")
-
-            # Temp (cleanly placed inside capsule)
-            temp_val = s.get("temp", "30°")
-            draw.text((cx, pill_y0 + 125), temp_val, font=self.font_pill_temp, fill=(255, 255, 255, 255), anchor="mt")
-
-        # -------------------------------------------------------------
-        # 3. CELESTIAL SUN / MOON ARC WIDGET
-        # -------------------------------------------------------------
-        arc_card_y0 = 690
-        arc_card_y1 = 905
-        self._draw_glass_card(img, 40, arc_card_y0, self.width - 40, arc_card_y1, radius=28, 
-                              fill_color=theme["card_fill"], border_color=theme["card_border"])
-        draw = ImageDraw.Draw(img)
-
-        draw.text((70, arc_card_y0 + 20), "In-Game Celestial Orbit & Clock", font=self.font_title, fill=(255, 255, 255, 245))
-        clock_str = f"In-Game: {data.get('in_game_clock', '9:17 AM')} (Rolls at {data.get('target_roll_hour', '12:00 PM')})"
-        draw.text((70, arc_card_y0 + 52), clock_str, font=self.font_body, fill=theme["sub_text"])
-
-        arc_cx = self.width // 2
-        arc_cy = arc_card_y1 - 36
-        arc_rx = 320
-        arc_ry = 110
-
-        arc_points = []
+        arc_pts = []
         for deg in range(180, 361, 3):
             rad = math.radians(deg)
             ax = arc_cx + arc_rx * math.cos(rad)
             ay = arc_cy + arc_ry * math.sin(rad)
-            arc_points.append((ax, ay))
+            arc_pts.append((ax, ay))
+        if len(arc_pts) > 1:
+            draw.line(arc_pts, fill=(130, 175, 255, 145), width=4)
 
-        if len(arc_points) > 1:
-            draw.line(arc_points, fill=(125, 165, 245, 135), width=4)
-
-        progress = data.get("slot_progress", 0.65)
-        current_deg = 180 + progress * 180
-        curr_rad = math.radians(current_deg)
+        prog = data.get("slot_progress", 0.5)
+        curr_rad = math.radians(180 + prog * 180)
         sun_x = arc_cx + arc_rx * math.cos(curr_rad)
         sun_y = arc_cy + arc_ry * math.sin(curr_rad)
+        draw.ellipse([sun_x - 13, sun_y - 13, sun_x + 13, sun_y + 13], fill=(255, 220, 90, 255), outline=(255, 255, 255, 245), width=3)
+        draw.text((sun_x, sun_y - 22), "Current Orbit", font=self.font_small_bold, fill=(255, 240, 165, 245), anchor="mb")
 
-        draw.ellipse([sun_x - 14, sun_y - 14, sun_x + 14, sun_y + 14], fill=(255, 220, 90, 255), outline=(255, 255, 255, 245), width=3)
-        draw.text((sun_x, sun_y - 24), "Current Time", font=self.font_small_bold, fill=(255, 240, 165, 245), anchor="mb")
+        draw.text((arc_cx - arc_rx + 10, arc_cy + 8), "03:00 AM", font=self.font_small, fill=theme["sub_text"], anchor="mt")
+        draw.text((arc_cx + arc_rx - 10, arc_cy + 8), "05:00 AM", font=self.font_small, fill=theme["sub_text"], anchor="mt")
 
-        draw.text((arc_cx - arc_rx + 10, arc_cy + 8), "03:00 AM (Roll Start)", font=self.font_small, fill=theme["sub_text"], anchor="mt")
-        draw.text((arc_cx + arc_rx - 10, arc_cy + 8), "05:00 AM (Next Roll)", font=self.font_small, fill=theme["sub_text"], anchor="mt")
+        # Dewdrop Portal & Eclipse Countdown Box
+        portal_y0 = left_y1 - 180
+        portal_y1 = left_y1 - 25
+        self._draw_glass_card(img, left_x0 + 25, portal_y0, left_x1 - 25, portal_y1, radius=20,
+                              fill_color=(15, 24, 48, 195), border_color=(100, 170, 255, 110))
+        draw = ImageDraw.Draw(img)
+        portal_text = f"Dimensional Rift - Dewdrop Portal & Eclipse"
+        draw.text((left_x0 + 45, portal_y0 + 16), portal_text, font=self.font_body_bold, fill=(140, 215, 255, 255))
+        portal_time = data.get('portal_time_str', 'Opening in 2 days 10 hours')
+        draw.text((left_x0 + 45, portal_y0 + 50), f"Gate Opening / Pembukaan: {portal_time}", font=self.font_body, fill=(255, 255, 255, 240))
+        draw.text((left_x0 + 45, portal_y0 + 82), "Siapkan mental & gear terbaik! (Prepare potions & gear!)", font=self.font_small, fill=(185, 215, 255, 210))
+        draw.text((left_x0 + 45, portal_y0 + 114), "High-Tier Loot, Ancient Dewdrop Relics & Mythic Boss Event", font=self.font_small, fill=(255, 215, 120, 220))
 
-        # -------------------------------------------------------------
-        # 4. TELEMETRY & STATS 2X2 GRID (WITH RED / GREEN BUFF BADGES)
-        # -------------------------------------------------------------
-        grid_y0 = 930
-        grid_h = 220
-        col_w = (self.width - 80 - 20) // 2
-        left_x0 = 40
-        left_x1 = left_x0 + col_w
-        right_x0 = left_x1 + 20
-        right_x1 = right_x0 + col_w
+        # =============================================================
+        # RIGHT PANEL (Hourly Forecast, Telemetry, Modifiers, Gacha)
+        # Dimensions: x0: 735, y0: 30, x1: 1570, y1: 870
+        # =============================================================
+        right_x0, right_y0, right_x1, right_y1 = 735, 30, 1570, 870
 
-        # --- Card 1: Atmospheric Severity & Sensors ---
-        self._draw_glass_card(img, left_x0, grid_y0, left_x1, grid_y0 + grid_h, radius=24, 
+        # 1. Hourly Forecast Capsule Bar (Top of Right Panel)
+        hour_y0 = right_y0
+        hour_y1 = right_y0 + 225
+        self._draw_glass_card(img, right_x0, hour_y0, right_x1, hour_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"])
         draw = ImageDraw.Draw(img)
-        draw.text((left_x0 + 24, grid_y0 + 18), "ATMOSPHERE & SEVERITY", font=self.font_small_bold, fill=(160, 205, 255, 190))
-        draw.text((left_x0 + 24, grid_y0 + 44), f"Storm Level: {data.get('storm_level', '0% (Calm)')}", font=self.font_body_bold, fill=(255, 255, 255, 245))
+        draw.text((right_x0 + 25, hour_y0 + 16), "Hourly Weather Forecast", font=self.font_title, fill=(255, 255, 255, 245))
+        draw.text((right_x1 - 25, hour_y0 + 20), "Rolls every 2 Real Hours", font=self.font_small, fill=theme["sub_text"], anchor="ra")
+
+        slots = data.get("hourly_slots", [
+            {"time": "04 AM", "icon": "Dry", "temp": "28°", "prob": "35%", "is_active": False},
+            {"time": "08 AM", "icon": "NorthernLights", "temp": "29°", "prob": "22%", "is_active": False},
+            {"time": "Now",   "icon": weather_type, "temp": "31°", "prob": "Live", "is_active": True},
+            {"time": "04 PM", "icon": "Nightmare", "temp": "30°", "prob": "12%", "is_active": False},
+            {"time": "08 PM", "icon": "Rain", "temp": "26°", "prob": "20%", "is_active": False},
+            {"time": "12 AM", "icon": "Night", "temp": "24°", "prob": "8%",  "is_active": False},
+        ])
+
+        pill_w = 118
+        pill_gap = 14
+        start_px = right_x0 + 25
+        pill_y0 = hour_y0 + 58
+        pill_y1 = hour_y1 - 20
+
+        for i, s in enumerate(slots):
+            px0 = start_px + i * (pill_w + pill_gap)
+            px1 = px0 + pill_w
+            is_act = s.get("is_active", False)
+            if is_act:
+                self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=18,
+                                      fill_color=theme["pill_active_fill"], border_color=theme["pill_active_border"])
+            else:
+                self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=18,
+                                      fill_color=theme["pill_inactive_fill"], border_color=theme["card_border"])
+            draw = ImageDraw.Draw(img)
+            pcx = (px0 + px1) // 2
+            t_col = (255, 255, 255, 255) if is_act else (210, 225, 255, 205)
+            draw.text((pcx, pill_y0 + 10), s["time"], font=self.font_pill_time, fill=t_col, anchor="mt")
+            self._draw_weather_icon(draw, pcx, pill_y0 + 50, s.get("icon", "Dry"), size=30)
+            p_col = (130, 240, 255, 255) if is_act else (170, 210, 255, 185)
+            draw.text((pcx, pill_y0 + 76), s.get("prob", "0%"), font=self.font_small, fill=p_col, anchor="mt")
+            draw.text((pcx, pill_y0 + 102), s.get("temp", "30°"), font=self.font_pill_temp, fill=(255, 255, 255, 255), anchor="mt")
+
+        # 2. Middle Telemetry & Market Cards (Side-by-Side)
+        mid_y0 = hour_y1 + 18
+        mid_y1 = mid_y0 + 250
+        mid_col_w = (right_x1 - right_x0 - 18) // 2
+        card1_x0 = right_x0
+        card1_x1 = card1_x0 + mid_col_w
+        card2_x0 = card1_x1 + 18
+        card2_x1 = right_x1
+
+        # Card 1: Atmospheric Severity & Sensors
+        self._draw_glass_card(img, card1_x0, mid_y0, card1_x1, mid_y1, radius=24,
+                              fill_color=theme["card_fill"], border_color=theme["card_border"])
+        draw = ImageDraw.Draw(img)
+        draw.text((card1_x0 + 22, mid_y0 + 16), "ATMOSPHERE & SEVERITY", font=self.font_small_bold, fill=(160, 205, 255, 200))
+        draw.text((card1_x0 + 22, mid_y0 + 44), f"Storm Level: {data.get('storm_level', '0% (Calm)')}", font=self.font_body_bold, fill=(255, 255, 255, 245))
         
         # Severity Bar
-        bar_x0 = left_x0 + 24
-        bar_x1 = left_x1 - 24
-        bar_y = grid_y0 + 82
-        draw.rounded_rectangle([bar_x0, bar_y, bar_x1, bar_y + 12], radius=6, fill=(48, 68, 108, 180))
-        storm_pct = data.get("storm_pct", 0.05)
-        fill_x = bar_x0 + (bar_x1 - bar_x0) * storm_pct
-        if fill_x - bar_x0 >= 16:
+        bar_x0 = card1_x0 + 22
+        bar_x1 = card1_x1 - 22
+        bar_y = mid_y0 + 82
+        draw.rounded_rectangle([bar_x0, bar_y, bar_x1, bar_y + 12], radius=6, fill=(40, 58, 92, 190))
+        st_pct = data.get("storm_pct", 0.05)
+        fill_x = bar_x0 + (bar_x1 - bar_x0) * st_pct
+        if fill_x - bar_x0 >= 14:
             draw.rounded_rectangle([bar_x0, bar_y, fill_x, bar_y + 12], radius=6, fill=(80, 210, 255, 255))
         elif fill_x > bar_x0:
             draw.rectangle([bar_x0, bar_y, fill_x, bar_y + 12], fill=(80, 210, 255, 255))
 
-        draw.text((left_x0 + 24, grid_y0 + 114), f"Wind Force: {data.get('wind_force', '0.2 (Gentle)')}", font=self.font_small, fill=(215, 235, 255, 220))
-        draw.text((left_x0 + 24, grid_y0 + 144), f"Precipitation: {data.get('rain_index', '0.0 (None)')}", font=self.font_small, fill=(215, 235, 255, 220))
-        draw.text((left_x0 + 24, grid_y0 + 174), f"Shelter Sensor: {data.get('indoor_status', 'Outdoors')}", font=self.font_small, fill=(215, 235, 255, 220))
+        draw.text((card1_x0 + 22, mid_y0 + 112), f"Wind Force: {data.get('wind_force', '0.2')} • Rain Index: {data.get('rain_index', '0.0')}", font=self.font_small, fill=(215, 235, 255, 220))
+        indoor_st = data.get("indoor_status", "Open Sky / Outdoors 🏞️")
+        draw.text((card1_x0 + 22, mid_y0 + 144), f"Station Sensor: {indoor_st}", font=self.font_small, fill=(215, 235, 255, 220))
+        draw.text((card1_x0 + 22, mid_y0 + 176), f"Soil Moisture: Active Hydration", font=self.font_small, fill=(140, 235, 180, 220))
+        draw.text((card1_x0 + 22, mid_y0 + 208), f"Lightning Hazard: None / Safe", font=self.font_small, fill=(255, 240, 160, 220))
 
-        # --- Card 2: Market & Modifiers (WITH COLORED CHIPS) ---
-        self._draw_glass_card(img, right_x0, grid_y0, right_x1, grid_y0 + grid_h, radius=24, 
+        # Card 2: Market & Active Modifiers (Chips)
+        self._draw_glass_card(img, card2_x0, mid_y0, card2_x1, mid_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"])
         draw = ImageDraw.Draw(img)
+        draw.text((card2_x0 + 22, mid_y0 + 16), "MARKET & ADVENTURER MODIFIERS", font=self.font_small_bold, fill=(160, 205, 255, 200))
+        draw.text((card2_x0 + 22, mid_y0 + 44), "Active Realm Buffs & Prices", font=self.font_body_bold, fill=(255, 255, 255, 245))
+
         active_mods = data.get("active_modifiers", [])
         if active_mods:
-            # Render exactly the active in-game modifiers as beautiful chips
-            curr_y = grid_y0 + 48
-            curr_x = right_x0 + 24
-            for mod_str in active_mods:
+            chip_y = mid_y0 + 84
+            for mod_str in active_mods[:3]:
                 m_low = mod_str.lower()
-                # Positive buffs even if they have special words
-                if any(k in m_low for k in ["auto-water", "lumen", "upgrade", "exp", "monster", "mining", "mineral", "fish", "unlocked", "sale"]):
-                    b_type = "positive"
-                elif "-" in mod_str or "shop +" in m_low or "inflation" in m_low:
+                if any(k in m_low for k in ["auto-water", "lumen", "upgrade", "exp", "monster", "mining", "mineral", "fish", "unlocked", "sale", "+"]):
+                    if "shop +" in m_low or "inflation" in m_low:
+                        b_type = "negative"
+                    else:
+                        b_type = "positive"
+                elif "-" in mod_str or "shop +" in m_low or "inflation" in m_low or "hazard" in m_low:
                     b_type = "negative"
                 else:
                     b_type = "positive"
-                # Check wrap
-                try:
-                    tw = self.font_chip.getbbox(mod_str)[2] - self.font_chip.getbbox(mod_str)[0]
-                except Exception:
-                    tw = len(mod_str) * 9
-                if curr_x + tw + 34 > right_x1 - 10:
-                    curr_x = right_x0 + 24
-                    curr_y += 46
-                curr_x = self._draw_buff_chip(img, draw, curr_x, curr_y, mod_str, b_type)
+                self._draw_buff_chip(img, draw, card2_x0 + 22, chip_y, mod_str, buff_type=b_type)
+                chip_y += 46
         else:
-            # Fallback to standard 3 rows
-            chip_y1 = grid_y0 + 46
-            curr_x = right_x0 + 24
-            
+            chip_x = card2_x0 + 22
+            chip_y = mid_y0 + 84
             price_val = data.get("price_val", 0)
             if price_val > 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y1, f"Shop +{price_val}%", "negative")
+                self._draw_buff_chip(img, draw, chip_x, chip_y, f"Shop +{price_val}% (Surcharge)", buff_type="negative")
             elif price_val < 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y1, f"Shop {price_val}% Sale", "positive")
+                self._draw_buff_chip(img, draw, chip_x, chip_y, f"Shop {price_val}% Sale", buff_type="positive")
             else:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y1, "Shop 1.0x Normal", "neutral")
+                self._draw_buff_chip(img, draw, chip_x, chip_y, "Shop 1.0x Normal", buff_type="neutral")
             
+            chip_y2 = mid_y0 + 130
             dmg_val = data.get("damage_val", 0)
             if dmg_val > 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y1, f"Damage +{dmg_val}%", "positive")
+                self._draw_buff_chip(img, draw, chip_x, chip_y2, f"Damage +{dmg_val}%", buff_type="positive")
             elif dmg_val < 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y1, f"Damage {dmg_val}%", "negative")
+                self._draw_buff_chip(img, draw, chip_x, chip_y2, f"Damage {dmg_val}%", buff_type="negative")
             else:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y1, "Damage 1.0x", "neutral")
+                self._draw_buff_chip(img, draw, chip_x, chip_y2, "Damage 1.0x Normal", buff_type="neutral")
 
-            chip_y2 = grid_y0 + 94
-            curr_x = right_x0 + 24
-
+            chip_y3 = mid_y0 + 176
             spd_val = data.get("speed_val", 0)
             if spd_val > 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y2, f"Speed +{spd_val}%", "positive")
+                self._draw_buff_chip(img, draw, chip_x, chip_y3, f"Speed +{spd_val}%", buff_type="positive")
             elif spd_val < 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y2, f"Speed {spd_val}%", "negative")
+                self._draw_buff_chip(img, draw, chip_x, chip_y3, f"Speed {spd_val}%", buff_type="negative")
             else:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y2, "Speed 1.0x", "neutral")
+                self._draw_buff_chip(img, draw, chip_x, chip_y3, "Speed 1.0x Normal", buff_type="neutral")
 
-            upg_val = data.get("upgrade_val", 0)
-            if upg_val > 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y2, f"Upgrade +{upg_val}%", "positive")
-            else:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y2, "Upgrade +0%", "neutral")
-
-            chip_y3 = grid_y0 + 142
-            curr_x = right_x0 + 24
-
-            mine_val = data.get("mining_val", 0)
-            if mine_val > 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y3, f"Mining +{mine_val}%", "positive")
-            elif mine_val < 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y3, f"Mining {mine_val}%", "negative")
-            
-            extra_buff = data.get("special_buff", "")
-            if extra_buff:
-                is_pos = "+" in extra_buff or any(k in extra_buff.lower() for k in ["lumen", "fish", "water", "aurora", "mineral", "luck", "drop", "bonus", "exp"])
-                if "shop +" in extra_buff.lower() or "inflation" in extra_buff.lower() or "hazard" in extra_buff.lower() or "horror" in extra_buff.lower():
-                    is_pos = False
-                b_type = "positive" if is_pos else "negative"
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y3, extra_buff, b_type)
-            elif mine_val == 0:
-                curr_x = self._draw_buff_chip(img, draw, curr_x, chip_y3, "Mining 1.0x Normal", "neutral")
-
-        # -------------------------------------------------------------
-        # 5. 24H WEATHER GACHA ODDS CARD (INCLUDES NORTHERN LIGHTS & NIGHTMARE)
-        # -------------------------------------------------------------
-        gacha_y0 = 1175
-        gacha_y1 = 1535
-        self._draw_glass_card(img, 40, gacha_y0, self.width - 40, gacha_y1, radius=28, 
+        # 3. 24H Weather Gacha Forecast (Bottom of Right Panel)
+        gacha_y0 = mid_y1 + 18
+        gacha_y1 = right_y1
+        self._draw_glass_card(img, right_x0, gacha_y0, right_x1, gacha_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"])
         draw = ImageDraw.Draw(img)
-
-        draw.text((70, gacha_y0 + 20), f"Weather Gacha Probability (Day {data.get('season_day', 1)} Pool)", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((self.width - 70, gacha_y0 + 26), "Calculated from Seasonal Odds", font=self.font_small, fill=theme["sub_text"], anchor="ra")
+        draw.text((right_x0 + 25, gacha_y0 + 18), "24H Weather Gacha Forecast", font=self.font_title, fill=(255, 255, 255, 245))
+        draw.text((right_x1 - 25, gacha_y0 + 22), f"Day {data.get('season_day', 1)} Seasonal Probability Pool", font=self.font_small, fill=theme["sub_text"], anchor="ra")
 
         odds = data.get("odds", [
-            ("Northern Lights", "NorthernLights", 25),
-            ("Dry", "Dry", 25),
-            ("Drizzle", "Drizzle", 18),
-            ("Rain", "Rain", 15),
-            ("Windy", "Windy", 10),
-            ("Heavy Rain", "HeavyRain", 5),
-            ("Gale", "Gale", 2),
-            ("Nightmare", "Nightmare", 0),
-            ("Snow", "Snow", 0),
+            ["Dry", "Dry", 38],
+            ["Rain", "Rain", 20],
+            ["Heavy Rain", "HeavyRain", 16],
+            ["Windy", "Windy", 13],
+            ["Drizzle", "Drizzle", 8],
+            ["Gale", "Gale", 5],
+            ["Nightmare", "Nightmare", 0],
+            ["Northern Lights", "NorthernLights", 0]
         ])
 
-        odds_start_y = gacha_y0 + 64
-        row_h = 34
-        for idx, (w_name, w_key, w_pct) in enumerate(odds[:9]):
-            ry = odds_start_y + idx * row_h
-            # Draw vector weather icon
-            self._draw_weather_icon(draw, 85, ry + 10, w_key, size=22)
+        # 2-column layout for gacha bars
+        half_w = (right_x1 - right_x0 - 60) // 2
+        col1_x = right_x0 + 25
+        col2_x = col1_x + half_w + 30
+        
+        for idx, (label, key, pct) in enumerate(odds[:8]):
+            is_col2 = (idx >= 4)
+            row_idx = idx % 4
+            bx0 = col2_x if is_col2 else col1_x
+            by = gacha_y0 + 64 + row_idx * 48
             
-            # Label
-            draw.text((108, ry), w_name, font=self.font_body, fill=(255, 255, 255, 235))
+            # Weather Icon
+            self._draw_weather_icon(draw, bx0 + 14, by + 10, key, size=24)
+            # Weather Label
+            draw.text((bx0 + 34, by + 1), str(label), font=self.font_small_bold, fill=(240, 248, 255, 235))
+            # Pct
+            pct_val = int(pct) if isinstance(pct, (int, float)) else 0
+            pct_str = f"{pct_val}%"
+            draw.text((bx0 + half_w, by + 1), pct_str, font=self.font_small_bold, fill=(140, 220, 255, 245), anchor="ra")
             
-            # Bar gauge
-            bx0 = 310
-            bx1 = self.width - 150
-            draw.rounded_rectangle([bx0, ry + 6, bx1, ry + 18], radius=6, fill=(45, 62, 98, 165))
-            
-            fill_len = (bx1 - bx0) * (w_pct / 100.0)
-            if fill_len >= 16:
-                # Custom bar colors for special weathers
-                if "northern" in w_key.lower():
+            # Progress bar
+            bar_len = half_w - 34
+            bar_start = bx0 + 34
+            draw.rounded_rectangle([bar_start, by + 22, bar_start + bar_len, by + 30], radius=4, fill=(40, 56, 88, 175))
+            if pct_val > 0:
+                fill_w = max(10, int(bar_len * (pct_val / 50.0)))
+                # Custom colors for special weathers
+                if "northern" in key.lower():
                     bar_color = (0, 245, 185, 255)
-                elif "nightmare" in w_key.lower():
+                elif "nightmare" in key.lower():
                     bar_color = (255, 60, 85, 255)
-                elif w_pct > 15:
+                elif pct_val > 15:
                     bar_color = (100, 205, 255, 245)
                 else:
                     bar_color = (75, 145, 225, 205)
-                draw.rounded_rectangle([bx0, ry + 6, bx0 + fill_len, ry + 18], radius=6, fill=bar_color)
-            elif fill_len > 2:
-                draw.rectangle([bx0, ry + 6, bx0 + fill_len, ry + 18], fill=(75, 145, 225, 205))
-
-            # Percentage text
-            draw.text((self.width - 70, ry), f"{w_pct:2d}%", font=self.font_body_bold, fill=(225, 245, 255, 245), anchor="ra")
-
-        # -------------------------------------------------------------
-        # 6. PORTAL RIFT FOOTER BANNER
-        # -------------------------------------------------------------
-        portal_y0 = 1555
-        portal_y1 = 1645
-        self._draw_glass_card(img, 40, portal_y0, self.width - 40, portal_y1, radius=20, 
-                              fill_color=(46, 26, 78, 185), border_color=(185, 105, 255, 85))
-        draw = ImageDraw.Draw(img)
-
-        portal_text = f"Dewdrop Portal & Eclipse: {data.get('portal_time_str', 'Opening in 2 days 8 hours')}"
-        draw.text((70, portal_y0 + 16), portal_text, font=self.font_body_bold, fill=(240, 210, 255, 255))
-        draw.text((70, portal_y0 + 48), "Siapkan mental & equip terbaik! (Prepare your best gear & potions!)", font=self.font_small, fill=(205, 185, 245, 205))
+                draw.rounded_rectangle([bar_start, by + 22, bar_start + fill_w, by + 30], radius=4, fill=bar_color)
 
         return img
