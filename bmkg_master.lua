@@ -49,6 +49,8 @@ local OWNER_USER_ID   = "1050406766858481725" -- Alert ping when offline
 local STATE_FILE_NAME = "bmkg_last_state.json"
 local AUTORUN_FILE    = "bmkg_autorun.lua"
 local lastCloudPing   = 0
+local lastCardWeather = nil
+local lastCardUrl     = nil
 
 -- Weather-Specific Role Mappings (Shop Price Grouped)
 local WEATHER_ROLES = {
@@ -725,77 +727,87 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
         -- CLOUD IMAGE GENERATOR BRIDGE (Fetches Anime Card from Render)
         -- -------------------------------------------------------------
         if CLOUD_API_URL and CLOUD_API_URL ~= "" then
-            -- Collect readable modifiers list for card chips
-            local modChips = {}
-            if weatherData.Effects then
-                if (weatherData.Effects.AutoWater or 0) > 0 then table.insert(modChips, "Auto-Water Crops 100%") end
-                if weatherData.Effects.LumenDrops or rawWeather == "NorthernLights" then table.insert(modChips, "Lumen Drops +100%") end
-                if weatherData.Effects.UpgradeSuccessBonus or rawWeather == "NorthernLights" then table.insert(modChips, "Upgrade Success +10%") end
-                if weatherData.Effects.MiningSpeedPct or rawWeather == "Nightmare" then table.insert(modChips, "Mining Speed +10%") end
-                if weatherData.Effects.EXPMultiplier or rawWeather == "Nightmare" then table.insert(modChips, "EXP Bonus +50%") end
-                if weatherData.Effects.DropLuck or rawWeather == "Nightmare" then table.insert(modChips, "Monster Drops +50%") end
-            end
-
-            -- Simplified odds array for visual card
-            local oddsTuples = {}
-            for _, od in ipairs(oddsList) do
-                table.insert(oddsTuples, { od.name, od.key or od.name, od.pct })
-            end
-
-            local cloudPayload = {
-                weather_type = rawWeather,
-                weather_display = weatherDisplay,
-                season = season,
-                season_day = day,
-                slot_index = slotIndex,
-                server_id = shortJobId,
-                in_game_clock = inGameTimeFormatted,
-                target_roll_hour = targetInGameRollHour,
-                slot_progress = slotRatio,
-                storm_pct = stormIntensity or 0,
-                storm_level = string.format("%.0f%%", (stormIntensity or 0) * 100),
-                wind_force = string.format("%.1f", windInt or 0),
-                rain_index = string.format("%.1f", rainInt or 0),
-                indoor_status = isIndoors and "Indoors / Sheltered 🏠" or "Open Sky / Outdoors 🏞️",
-                active_modifiers = modChips,
-                odds = oddsTuples
-            }
-
-            print("[BMKG Cloud] 📡 Requesting Anime Weather Card from Cloud (" .. tostring(rawWeather) .. ")...")
-            local cloudOk, cloudErr = pcall(function()
-                local cRes = httpRequest({
-                    Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
-                    url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
-                    Method = "POST",
-                    method = "POST",
-                    Headers = { ["Content-Type"] = "application/json" },
-                    headers = { ["Content-Type"] = "application/json" },
-                    Body = HttpService:JSONEncode(cloudPayload),
-                    body = HttpService:JSONEncode(cloudPayload),
-                    Timeout = 30,
-                    timeout = 30
-                })
-                local resBody = cRes and (cRes.Body or cRes.body)
-                local resCode = cRes and (cRes.StatusCode or cRes.status or cRes.statusCode or 0)
-                if resBody then
-                    local sDec, decData = pcall(HttpService.JSONDecode, HttpService, resBody)
-                    if sDec and decData and decData.image_url then
-                        print("[BMKG Cloud] ✅ Card successfully attached: " .. tostring(decData.image_url))
-                        -- Pure visual card presentation: render only the image card (removes text redundancy)
-                        payload.embeds = {{
-                            color = embedColor,
-                            image = { url = decData.image_url }
-                        }}
-                        lastCloudPing = os.time()
-                    else
-                        print("[BMKG Cloud] ⚠️ Decode error or missing image_url (Code " .. tostring(resCode) .. "): " .. tostring(resBody))
-                    end
-                else
-                    print("[BMKG Cloud] ⚠️ Cloud returned no body (Code: " .. tostring(resCode) .. ")")
+            if lastCardUrl and lastCardWeather == rawWeather and not forceNewMessage then
+                -- Weather hasn't changed; reuse cached image card to prevent redundant cloud generation every minute
+                payload.embeds = {{
+                    color = embedColor,
+                    image = { url = lastCardUrl }
+                }}
+            else
+                -- Collect readable modifiers list for card chips
+                local modChips = {}
+                if weatherData.Effects then
+                    if (weatherData.Effects.AutoWater or 0) > 0 then table.insert(modChips, "Auto-Water Crops 100%") end
+                    if weatherData.Effects.LumenDrops or rawWeather == "NorthernLights" then table.insert(modChips, "Lumen Drops +100%") end
+                    if weatherData.Effects.UpgradeSuccessBonus or rawWeather == "NorthernLights" then table.insert(modChips, "Upgrade Success +10%") end
+                    if weatherData.Effects.MiningSpeedPct or rawWeather == "Nightmare" then table.insert(modChips, "Mining Speed +10%") end
+                    if weatherData.Effects.EXPMultiplier or rawWeather == "Nightmare" then table.insert(modChips, "EXP Bonus +50%") end
+                    if weatherData.Effects.DropLuck or rawWeather == "Nightmare" then table.insert(modChips, "Monster Drops +50%") end
                 end
-            end)
-            if not cloudOk then
-                print("[BMKG Cloud] ❌ HTTP Exception: " .. tostring(cloudErr))
+
+                -- Simplified odds array for visual card
+                local oddsTuples = {}
+                for _, od in ipairs(oddsList) do
+                    table.insert(oddsTuples, { od.name, od.key or od.name, od.pct })
+                end
+
+                local cloudPayload = {
+                    weather_type = rawWeather,
+                    weather_display = weatherDisplay,
+                    season = season,
+                    season_day = day,
+                    slot_index = slotIndex,
+                    server_id = shortJobId,
+                    in_game_clock = inGameTimeFormatted,
+                    target_roll_hour = targetInGameRollHour,
+                    slot_progress = slotRatio,
+                    storm_pct = stormIntensity or 0,
+                    storm_level = string.format("%.0f%%", (stormIntensity or 0) * 100),
+                    wind_force = string.format("%.1f", windInt or 0),
+                    rain_index = string.format("%.1f", rainInt or 0),
+                    indoor_status = isIndoors and "Indoors / Sheltered 🏠" or "Open Sky / Outdoors 🏞️",
+                    active_modifiers = modChips,
+                    odds = oddsTuples
+                }
+
+                print("[BMKG Cloud] 📡 Requesting Anime Weather Card from Cloud (" .. tostring(rawWeather) .. ")...")
+                local cloudOk, cloudErr = pcall(function()
+                    local cRes = httpRequest({
+                        Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
+                        url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
+                        Method = "POST",
+                        method = "POST",
+                        Headers = { ["Content-Type"] = "application/json" },
+                        headers = { ["Content-Type"] = "application/json" },
+                        Body = HttpService:JSONEncode(cloudPayload),
+                        body = HttpService:JSONEncode(cloudPayload),
+                        Timeout = 30,
+                        timeout = 30
+                    })
+                    local resBody = cRes and (cRes.Body or cRes.body)
+                    local resCode = cRes and (cRes.StatusCode or cRes.status or cRes.statusCode or 0)
+                    if resBody then
+                        local sDec, decData = pcall(HttpService.JSONDecode, HttpService, resBody)
+                        if sDec and decData and decData.image_url then
+                            print("[BMKG Cloud] ✅ Card successfully attached: " .. tostring(decData.image_url))
+                            lastCardUrl = decData.image_url
+                            lastCardWeather = rawWeather
+                            -- Pure visual card presentation: render only the image card (removes text redundancy)
+                            payload.embeds = {{
+                                color = embedColor,
+                                image = { url = decData.image_url }
+                            }}
+                            lastCloudPing = os.time()
+                        else
+                            print("[BMKG Cloud] ⚠️ Decode error or missing image_url (Code " .. tostring(resCode) .. "): " .. tostring(resBody))
+                        end
+                    else
+                        print("[BMKG Cloud] ⚠️ Cloud returned no body (Code: " .. tostring(resCode) .. ")")
+                    end
+                end)
+                if not cloudOk then
+                    print("[BMKG Cloud] ❌ HTTP Exception: " .. tostring(cloudErr))
+                end
             end
         end
             if forceNewMessage or targetRoleId then
