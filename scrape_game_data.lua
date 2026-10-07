@@ -1,59 +1,76 @@
 --[[
     ========================================================================
-    BMKG GAME DATA DUMPER / SCRAPER
+    BMKG COMPLETE GAME DATA SCRAPER & EXHAUSTIVE DUMPER
     ========================================================================
-    Dumps all game data (Constants, Weather, Fishing, Mining, Crafting, 
-    Items, Shops, Drops, Configs) into a structured folder on your executor:
+    Recursively scans and executes/requires EVERY SINGLE ModuleScript in:
+      - ReplicatedStorage (all nested folders & packages)
+      - Players.LocalPlayer.PlayerScripts (all client systems)
+      - ReplicatedFirst (if any)
     
-    Folder: "bmkg_gamedata/"
-    Files:
-      - bmkg_gamedata/constants_weather.json
-      - bmkg_gamedata/constants_seasons.json
-      - bmkg_gamedata/constants_fishing.json
-      - bmkg_gamedata/constants_bosses.json
-      - bmkg_gamedata/constants_all_raw.json
-      - bmkg_gamedata/replicated_attributes.json
-      - bmkg_gamedata/client_modules_list.json
-      - bmkg_gamedata/full_game_dump.json
+    Extracts:
+      1. Every module's returned data table / config / constants / dictionary
+      2. ReplicatedStorage Attributes & Value Objects
+      3. Automatically organizes and dumps everything into "bmkg_gamedata/"
     ========================================================================
 ]]
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local DUMP_FOLDER = "bmkg_gamedata"
 
--- Ensure writefile / makefolder exist
-local canWrite = (writefile ~= nil)
-local canMakeFolder = (makefolder ~= nil)
-
-if canMakeFolder then
+-- Create target directory
+if makefolder then
     pcall(makefolder, DUMP_FOLDER)
+    pcall(makefolder, DUMP_FOLDER .. "/modules_replicated")
+    pcall(makefolder, DUMP_FOLDER .. "/modules_client")
 end
 
-local function safeSerialize(val, depth, maxDepth)
+-- Deep serializer to convert any complex Roblox datatype into clean JSON
+local function deepSerialize(val, depth, maxDepth, seen)
     depth = depth or 0
-    maxDepth = maxDepth or 6
+    maxDepth = maxDepth or 7
+    seen = seen or {}
+
     if depth > maxDepth then return "<MaxDepthReached>" end
 
     local valType = typeof(val)
     if valType == "string" or valType == "number" or valType == "boolean" then
         return val
+    elseif val == nil then
+        return nil
     elseif valType == "Vector3" then
         return { X = val.X, Y = val.Y, Z = val.Z }
+    elseif valType == "Vector2" then
+        return { X = val.X, Y = val.Y }
     elseif valType == "Color3" then
-        return { R = val.R, G = val.G, B = val.B }
+        return { R = math.floor(val.R * 255), G = math.floor(val.G * 255), B = math.floor(val.B * 255), Hex = val:ToHex() }
+    elseif valType == "CFrame" then
+        return { Position = { X = val.Position.X, Y = val.Position.Y, Z = val.Position.Z } }
+    elseif valType == "EnumItem" then
+        return tostring(val)
     elseif valType == "Instance" then
-        return "<Instance: " .. val:GetFullName() .. ">"
+        return {
+            __type = "Instance",
+            ClassName = val.ClassName,
+            Name = val.Name,
+            FullName = val:GetFullName()
+        }
     elseif valType == "function" then
         return "<function>"
     elseif valType == "table" then
+        if seen[val] then
+            return "<CircularRef>"
+        end
+        seen[val] = true
+
         local out = {}
         for k, v in pairs(val) do
             local keyStr = tostring(k)
-            out[keyStr] = safeSerialize(v, depth + 1, maxDepth)
+            out[keyStr] = deepSerialize(v, depth + 1, maxDepth, seen)
         end
         return out
     else
@@ -61,102 +78,92 @@ local function safeSerialize(val, depth, maxDepth)
     end
 end
 
-local function dumpToFile(fileName, dataTable)
-    local serialized = safeSerialize(dataTable)
-    local success, jsonStr = pcall(HttpService.JSONEncode, HttpService, serialized)
-    if success and jsonStr then
-        local filePath = DUMP_FOLDER .. "/" .. fileName
-        if writefile then
-            pcall(writefile, filePath, jsonStr)
-            print("[BMKG Dumper] ✅ Saved: " .. filePath)
+local function saveJson(relativeFilePath, dataTable)
+    if not writefile then return false end
+    local serialized = deepSerialize(dataTable)
+    local ok, jsonStr = pcall(HttpService.JSONEncode, HttpService, serialized)
+    if ok and jsonStr then
+        local fullPath = DUMP_FOLDER .. "/" .. relativeFilePath
+        pcall(writefile, fullPath, jsonStr)
+        return true
+    end
+    return false
+end
+
+print("------------------------------------------------------------")
+print("[BMKG Scraper] 🚀 Starting EXHAUSTIVE, END-TO-END game scrape...")
+print("------------------------------------------------------------")
+
+local totalFound = 0
+local totalSuccess = 0
+local totalFailed = 0
+
+local masterDump = {
+    _metadata = {
+        Timestamp = os.time(),
+        PlaceId = game.PlaceId,
+        JobId = game.JobId,
+        ScraperVersion = "3.0.0-exhaustive"
+    },
+    ReplicatedStorage = {},
+    PlayerScripts = {},
+    ReplicatedAttributes = {}
+}
+
+-- 1. Exhaustively scan ReplicatedStorage
+print("[BMKG Scraper] 📦 Scanning ALL descendants of ReplicatedStorage...")
+for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+    if desc:IsA("ModuleScript") then
+        totalFound = totalFound + 1
+        local safeName = string.gsub(desc.Name, "[^%w_%-]", "_")
+        local reqOk, reqResult = pcall(require, desc)
+
+        if reqOk and type(reqResult) == "table" then
+            totalSuccess = totalSuccess + 1
+            masterDump.ReplicatedStorage[desc:GetFullName()] = reqResult
+            saveJson("modules_replicated/" .. safeName .. ".json", reqResult)
         else
-            warn("[BMKG Dumper] writefile not available on executor!")
+            totalFailed = totalFailed + 1
+            masterDump.ReplicatedStorage[desc:GetFullName()] = "<RequireFailedOrNonTable>"
         end
-    else
-        warn("[BMKG Dumper] JSON encoding failed for: " .. fileName)
     end
 end
 
-print("[BMKG Dumper] 🚀 Starting complete game data scrape...")
-
-local fullDump = {}
-
--- 1. Constants Module
-pcall(function()
-    local Shared = ReplicatedStorage:FindFirstChild("Shared")
-    if Shared then
-        local Core = Shared:FindFirstChild("Core")
-        if Core then
-            local ConstModule = Core:FindFirstChild("Constants")
-            if ConstModule and ConstModule:IsA("ModuleScript") then
-                local Constants = require(ConstModule)
-                if Constants then
-                    fullDump["Constants"] = Constants
-                    if Constants.Weather then
-                        dumpToFile("constants_weather.json", Constants.Weather)
-                    end
-                    if Constants.Seasons or Constants.GetSeasonState then
-                        dumpToFile("constants_seasons.json", {
-                            Seasons = Constants.Seasons,
-                            SeasonalProbabilities = Constants.Weather and Constants.Weather.SeasonalProbabilities
-                        })
-                    end
-                    if Constants.Fishing then
-                        dumpToFile("constants_fishing.json", Constants.Fishing)
-                    end
-                    if Constants.WeeklyBoss then
-                        dumpToFile("constants_bosses.json", Constants.WeeklyBoss)
-                    end
-                    dumpToFile("constants_all_raw.json", Constants)
-                end
-            end
-        end
-    end
-end)
-
--- 2. ReplicatedStorage Attributes
-pcall(function()
-    local attrs = ReplicatedStorage:GetAttributes()
-    fullDump["ReplicatedAttributes"] = attrs
-    dumpToFile("replicated_attributes.json", attrs)
-end)
-
--- 3. Discover all ModuleScripts in ReplicatedStorage and Client
-pcall(function()
-    local moduleList = {}
-    for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+-- 2. Exhaustively scan LocalPlayer.PlayerScripts (Client modules)
+if LocalPlayer and LocalPlayer:FindFirstChild("PlayerScripts") then
+    print("[BMKG Scraper] 🎮 Scanning ALL descendants of PlayerScripts...")
+    for _, desc in ipairs(LocalPlayer.PlayerScripts:GetDescendants()) do
         if desc:IsA("ModuleScript") then
-            table.insert(moduleList, {
-                Name = desc.Name,
-                FullName = desc:GetFullName(),
-                Parent = desc.Parent.Name
-            })
-        end
-    end
-    dumpToFile("modules_replicated.json", moduleList)
-end)
+            totalFound = totalFound + 1
+            local safeName = string.gsub(desc.Name, "[^%w_%-]", "_")
+            local reqOk, reqResult = pcall(require, desc)
 
--- 4. Try loading other common system configs if present
-pcall(function()
-    local extraConfigs = {}
-    local Shared = ReplicatedStorage:FindFirstChild("Shared")
-    if Shared then
-        for _, child in ipairs(Shared:GetChildren()) do
-            if child:IsA("ModuleScript") and child.Name ~= "Constants" then
-                local ok, res = pcall(require, child)
-                if ok and type(res) == "table" then
-                    extraConfigs[child.Name] = res
-                end
+            if reqOk and type(reqResult) == "table" then
+                totalSuccess = totalSuccess + 1
+                masterDump.PlayerScripts[desc:GetFullName()] = reqResult
+                saveJson("modules_client/" .. safeName .. ".json", reqResult)
+            else
+                totalFailed = totalFailed + 1
+                masterDump.PlayerScripts[desc:GetFullName()] = "<RequireFailedOrNonTable>"
             end
         end
     end
-    if next(extraConfigs) then
-        dumpToFile("shared_modules_dump.json", extraConfigs)
-        fullDump["SharedModules"] = extraConfigs
-    end
-end)
+end
 
--- 5. Master Full Dump
-dumpToFile("full_game_dump.json", fullDump)
+-- 3. Grab ReplicatedStorage Attributes & Value Objects
+print("[BMKG Scraper] 🌐 Dumping World Attributes & Values...")
+local attrs = ReplicatedStorage:GetAttributes()
+masterDump.ReplicatedAttributes = attrs
+saveJson("world_attributes.json", attrs)
 
-print("[BMKG Dumper] 🎉 Complete! All scraped files are saved in folder: " .. DUMP_FOLDER .. "/")
+-- 4. Save Master Complete Dump
+print("[BMKG Scraper] 💾 Writing Master full_game_dump.json...")
+saveJson("full_game_dump.json", masterDump)
+
+print("------------------------------------------------------------")
+print(string.format("[BMKG Scraper] ✅ FINISHED EXHAUSTIVE DUMP!"))
+print(string.format("   • Modules Discovered : %d", totalFound))
+print(string.format("   • Successfully Dumped: %d", totalSuccess))
+print(string.format("   • Skipped / Non-Table: %d", totalFailed))
+print("   • Saved to Folder    : " .. DUMP_FOLDER .. "/")
+print("------------------------------------------------------------")
