@@ -222,14 +222,32 @@ def build_help_embed():
     embed.set_footer(text="BMKG Lazie • Powered by Roblox Observatory Client")
     return embed
 
+async def purge_channel_messages(channel, limit: int = 100):
+    """Purges prior messages in the channel to leave only the fresh radar intact."""
+    try:
+        if hasattr(channel, "purge"):
+            await channel.purge(limit=limit)
+    except Exception as pe:
+        # Fallback if bulk purge fails (e.g. older than 14 days or missing Manage Messages permission)
+        try:
+            async for msg in channel.history(limit=limit):
+                try:
+                    await msg.delete()
+                    await asyncio.sleep(0.2)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 # ============================================================
 # BOT COMMAND HANDLERS (Standard Prefix + Slash)
 # ============================================================
 @bot.command(name="weather")
 async def cmd_prefix_weather(ctx):
-    async with ctx.typing():
-        embed, f = build_weather_embed_and_file()
-        await ctx.send(embed=embed, file=f)
+    # Purge old messages in the channel first, leaving only the fresh one
+    await purge_channel_messages(ctx.channel)
+    embed, f = build_weather_embed_and_file()
+    await ctx.send(embed=embed, file=f)
 
 @bot.command(name="gacha")
 async def cmd_prefix_gacha(ctx):
@@ -265,6 +283,20 @@ if HAS_SLASH_TREE:
     @bot.tree.command(name="weather", description="Check current live weather, temperature, and anime radar card.")
     async def slash_weather(interaction: discord.Interaction):
         await interaction.response.defer()
+        
+        # Purge other channel messages if bot has permission
+        if interaction.channel:
+            try:
+                # Delete messages except interaction
+                async for msg in interaction.channel.history(limit=50):
+                    try:
+                        await msg.delete()
+                        await asyncio.sleep(0.1)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+                
         embed, f = build_weather_embed_and_file()
         await interaction.followup.send(embed=embed, file=f)
 
