@@ -44,7 +44,7 @@ local LocalPlayer = Players.LocalPlayer
 -- Configuration & Webhooks
 local DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1540322408672534558/4UCzxOUqPmWeE-GYbWZ0ebZmyFB0ewE4dTZZziInsfZwnOzVJ9A4wXNO0dIdUfJzX7fC"
 local CLOUD_API_URL   = "https://the-portal-bmkg.onrender.com" -- Set your Render / Cloud service URL here (leave "" to send embeds directly to Discord)
-local ECLIPSE_ROLE_ID = "1541024678456463432"
+local ECLIPSE_ROLE_ID = "1557371112357367849"
 local OWNER_USER_ID   = "1050406766858481725" -- Alert ping when offline
 local STATE_FILE_NAME = "bmkg_last_state.json"
 local AUTORUN_FILE    = "bmkg_autorun.lua"
