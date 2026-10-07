@@ -32,14 +32,14 @@ from src.game_data_engine import (
 
 # Load token securely from environment or local .env file
 def get_bot_token():
-    token = os.environ.get("DISCORD_BOT_TOKEN")
+    token = os.environ.get("DISCORD_BOT") or os.environ.get("DISCORD_BOT_TOKEN") or os.environ.get("DISCORD_TOKEN")
     if token:
         return token
     env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
     if os.path.exists(env_file):
         with open(env_file, "r", encoding="utf-8") as f:
             for line in f:
-                if line.startswith("DISCORD_BOT_TOKEN="):
+                if any(line.startswith(k) for k in ["DISCORD_BOT=", "DISCORD_BOT_TOKEN=", "DISCORD_TOKEN="]):
                     return line.strip().split("=", 1)[1].strip("\"'")
     return ""
 

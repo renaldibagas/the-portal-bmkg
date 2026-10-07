@@ -33,7 +33,8 @@ def init_cloud_discord_bot():
         return
     # Check multiple common env var names
     bot_token = (
-        os.environ.get("DISCORD_BOT_TOKEN")
+        os.environ.get("DISCORD_BOT")
+        or os.environ.get("DISCORD_BOT_TOKEN")
         or os.environ.get("DISCORD_TOKEN")
         or os.environ.get("BOT_TOKEN")
         or os.environ.get("TOKEN")
@@ -44,7 +45,7 @@ def init_cloud_discord_bot():
         if os.path.exists(env_file):
             with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
-                    if any(line.startswith(k) for k in ["DISCORD_BOT_TOKEN=", "DISCORD_TOKEN=", "BOT_TOKEN="]):
+                    if any(line.startswith(k) for k in ["DISCORD_BOT=", "DISCORD_BOT_TOKEN=", "DISCORD_TOKEN=", "BOT_TOKEN="]):
                         bot_token = line.strip().split("=", 1)[1].strip("\"'")
                         break
 
