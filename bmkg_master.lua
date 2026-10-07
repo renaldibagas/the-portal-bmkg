@@ -734,15 +734,83 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                     image = { url = lastCardUrl }
                 }}
             else
-                -- Collect readable modifiers list for card chips
+                -- Collect readable modifiers list for card chips using exact scraped game Constants
                 local modChips = {}
-                if weatherData.Effects then
-                    if (weatherData.Effects.AutoWater or 0) > 0 then table.insert(modChips, "Auto-Water Crops 100%") end
-                    if weatherData.Effects.LumenDrops or rawWeather == "NorthernLights" then table.insert(modChips, "Lumen Drops +100%") end
-                    if weatherData.Effects.UpgradeSuccessBonus or rawWeather == "NorthernLights" then table.insert(modChips, "Upgrade Success +10%") end
-                    if weatherData.Effects.MiningSpeedPct or rawWeather == "Nightmare" then table.insert(modChips, "Mining Speed +10%") end
-                    if weatherData.Effects.EXPMultiplier or rawWeather == "Nightmare" then table.insert(modChips, "EXP Bonus +50%") end
-                    if weatherData.Effects.DropLuck or rawWeather == "Nightmare" then table.insert(modChips, "Monster Drops +50%") end
+                local effects = weatherData.Effects or (Constants.Weather and Constants.Weather.Effects and Constants.Weather.Effects[rawWeather]) or {}
+
+                -- 1. Shop Price Multipliers
+                local pVal = effects.PriceMultiplier or 1
+                local pPct = math.floor((pVal - 1) * 100 + 0.5)
+                if pPct > 0 then
+                    table.insert(modChips, string.format("Shop +%d%% (Surcharge)", pPct))
+                elseif pPct < 0 then
+                    table.insert(modChips, string.format("Shop %d%% Sale", pPct))
+                end
+
+                -- 2. Combat Multipliers (Damage & Speed)
+                local dVal = effects.DamageMultiplier or 1
+                local dPct = math.floor((dVal - 1) * 100 + 0.5)
+                if dPct ~= 0 then
+                    table.insert(modChips, string.format("Damage %+d%%", dPct))
+                end
+
+                local sVal = effects.MoveSpeedMultiplier or 1
+                local sPct = math.floor((sVal - 1) * 100 + 0.5)
+                if sPct ~= 0 then
+                    table.insert(modChips, string.format("Speed %+d%%", sPct))
+                end
+
+                -- 3. Ecology & Auto-Water
+                local wVal = effects.AutoWater or 0
+                if wVal >= 1 then
+                    table.insert(modChips, "Auto-Water Crops 100%")
+                elseif wVal > 0 then
+                    table.insert(modChips, string.format("Auto-Water Crops %d%%", math.floor(wVal * 100 + 0.5)))
+                end
+
+                -- 4. Special Bonuses (Upgrades, Mining, EXP, Monster Drops, Lumen)
+                local upgVal = effects.UpgradeSuccessBonus or (rawWeather == "NorthernLights" and 10 or 0)
+                if upgVal > 0 then
+                    table.insert(modChips, string.format("Upgrade Success +%d%%", math.floor(upgVal + 0.5)))
+                end
+
+                local lumenVal = effects.LumenLuck or (rawWeather == "NorthernLights" and 2 or 1)
+                if lumenVal > 1 then
+                    table.insert(modChips, string.format("Lumen Luck %.0fx", lumenVal))
+                end
+
+                local mineVal = effects.MiningSpeedPct or (rawWeather == "Nightmare" and 10 or 0)
+                if mineVal > 0 then
+                    table.insert(modChips, string.format("Mining Speed +%d%%", math.floor(mineVal + 0.5)))
+                end
+
+                local minVal = effects.MineralChanceBonus or 0
+                if minVal > 0 then
+                    table.insert(modChips, string.format("Mineral Chance +%d%%", math.floor(minVal + 0.5)))
+                end
+
+                local expVal = effects.EXPMultiplier or 1
+                if expVal > 1 then
+                    table.insert(modChips, string.format("EXP Bonus +%d%%", math.floor((expVal - 1) * 100 + 0.5)))
+                end
+
+                local dropVal = effects.DropLuck or 1
+                if dropVal > 1 then
+                    table.insert(modChips, string.format("Monster Drops +%d%%", math.floor((dropVal - 1) * 100 + 0.5)))
+                end
+
+                -- 5. Dimensional Fishing & Shadow Mutations
+                if rawWeather == "PortalEclipse" then
+                    table.insert(modChips, "Shadow Mutation Active")
+                    table.insert(modChips, "Universal Fish Biting")
+                elseif rawWeather == "Nightmare" then
+                    table.insert(modChips, "Ghost Mutation Active")
+                end
+
+                -- Fallback if no buffs
+                if #modChips == 0 then
+                    table.insert(modChips, "Shop 1.0x Normal (Standard Prices)")
+                    table.insert(modChips, "Combat 1.0x Normal")
                 end
 
                 -- Simplified odds array for visual card
@@ -767,6 +835,7 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                     rain_index = string.format("%.1f", rainInt or 0),
                     indoor_status = isIndoors and "Indoors / Sheltered 🏠" or "Open Sky / Outdoors 🏞️",
                     active_modifiers = modChips,
+                    portal_time_str = portalTimestamp and ("Gate Opening in " .. formatDurationHM(portalTimestamp)) or "Gate Opening in 2 days 10 hours",
                     odds = oddsTuples
                 }
 
