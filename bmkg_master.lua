@@ -43,10 +43,12 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Configuration & Webhooks
 local DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1540322408672534558/4UCzxOUqPmWeE-GYbWZ0ebZmyFB0ewE4dTZZziInsfZwnOzVJ9A4wXNO0dIdUfJzX7fC"
+local CLOUD_API_URL   = "https://the-portal-bmkg.onrender.com" -- Set your Render / Cloud service URL here (leave "" to send embeds directly to Discord)
 local ECLIPSE_ROLE_ID = "1541024678456463432"
 local OWNER_USER_ID   = "1050406766858481725" -- Alert ping when offline
 local STATE_FILE_NAME = "bmkg_last_state.json"
 local AUTORUN_FILE    = "bmkg_autorun.lua"
+local lastCloudPing   = 0
 
 -- Weather-Specific Role Mappings (Shop Price Grouped)
 local WEATHER_ROLES = {
@@ -719,48 +721,133 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
 
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
     if httpRequest and isCurrentInstance() then
-        if forceNewMessage or targetRoleId then
-            if lastMessageId then
-                pcall(function()
-                    httpRequest({
-                        Url = DISCORD_WEBHOOK .. "/messages/" .. tostring(lastMessageId),
-                        Method = "DELETE"
-                    })
-                end)
-                task.wait(0.3)
+        -- -------------------------------------------------------------
+        -- CLOUD IMAGE GENERATOR BRIDGE (With Auto-Fallback)
+        -- -------------------------------------------------------------
+        local sentViaCloud = false
+        if CLOUD_API_URL and CLOUD_API_URL ~= "" then
+            -- Collect readable modifiers list for card chips
+            local modChips = {}
+            if weatherData.Effects then
+                if (weatherData.Effects.AutoWater or 0) > 0 then table.insert(modChips, "Auto-Water Crops 100%") end
+                if weatherData.Effects.LumenDrops or rawWeather == "NorthernLights" then table.insert(modChips, "Lumen Drops +100%") end
+                if weatherData.Effects.UpgradeSuccessBonus or rawWeather == "NorthernLights" then table.insert(modChips, "Upgrade Success +10%") end
+                if weatherData.Effects.MiningSpeedPct or rawWeather == "Nightmare" then table.insert(modChips, "Mining Speed +10%") end
+                if weatherData.Effects.EXPMultiplier or rawWeather == "Nightmare" then table.insert(modChips, "EXP Bonus +50%") end
+                if weatherData.Effects.DropLuck or rawWeather == "Nightmare" then table.insert(modChips, "Monster Drops +50%") end
             end
 
-            local response = httpRequest({
-                Url = DISCORD_WEBHOOK .. "?wait=true",
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode(payload)
-            })
+            -- Simplified odds array for visual card
+            local oddsTuples = {}
+            for _, od in ipairs(oddsList) do
+                table.insert(oddsTuples, { od.name, od.key or od.name, od.pct })
+            end
 
-            if response and response.Body then
-                local successDecode, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
-                if successDecode and data and data.id then
-                    lastMessageId = data.id
-                    saveState({
-                        messageId = data.id,
-                        weather = rawWeather,
-                        season = season,
-                        day = day,
-                        slot = slotIndex,
-                        activeHeader = currentActiveHeader,
-                        timestamp = os.time()
-                    })
+            local cloudPayload = {
+                weather_type = rawWeather,
+                weather_display = weatherDisplay,
+                season = season,
+                season_day = day,
+                slot_index = slotIndex,
+                server_id = shortJobId,
+                in_game_clock = inGameTimeFormatted,
+                target_roll_hour = targetInGameRollHour,
+                slot_progress = slotRatio,
+                storm_pct = stormIntensity or 0,
+                storm_level = string.format("%.0f%%", (stormIntensity or 0) * 100),
+                wind_force = string.format("%.1f", windInt or 0),
+                rain_index = string.format("%.1f", rainInt or 0),
+                indoor_status = isIndoors and "Indoors / Sheltered 🏠" or "Open Sky / Outdoors 🏞️",
+                active_modifiers = modChips,
+                odds = oddsTuples,
+                role_ping = targetRoleId and string.format("<@&%s>", targetRoleId) or "",
+                alert_reason = statusMsg or "BMKG Weather Radar",
+                description = bmkgQuote,
+                color = embedColor,
+                webhook_url = DISCORD_WEBHOOK
+            }
+
+            pcall(function()
+                local cRes = httpRequest({
+                    Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/weather",
+                    Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = HttpService:JSONEncode(cloudPayload)
+                })
+                if cRes and (cRes.StatusCode == 200 or cRes.StatusCode == 204) then
+                    sentViaCloud = true
+                    lastCloudPing = os.time()
                 end
-            end
-        else
-            if lastMessageId then
-                local patchResponse = httpRequest({
-                    Url = DISCORD_WEBHOOK .. "/messages/" .. tostring(lastMessageId),
-                    Method = "PATCH",
+            end)
+        end
+
+        -- If not dispatched via cloud (or cloud disabled/down), fallback to direct Discord embed
+        if not sentViaCloud then
+            if forceNewMessage or targetRoleId then
+                if lastMessageId then
+                    pcall(function()
+                        httpRequest({
+                            Url = DISCORD_WEBHOOK .. "/messages/" .. tostring(lastMessageId),
+                            Method = "DELETE"
+                        })
+                    end)
+                    task.wait(0.3)
+                end
+
+                local response = httpRequest({
+                    Url = DISCORD_WEBHOOK .. "?wait=true",
+                    Method = "POST",
                     Headers = { ["Content-Type"] = "application/json" },
                     Body = HttpService:JSONEncode(payload)
                 })
-                if not (patchResponse and patchResponse.StatusCode == 200) then
+
+                if response and response.Body then
+                    local successDecode, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
+                    if successDecode and data and data.id then
+                        lastMessageId = data.id
+                        saveState({
+                            messageId = data.id,
+                            weather = rawWeather,
+                            season = season,
+                            day = day,
+                            slot = slotIndex,
+                            activeHeader = currentActiveHeader,
+                            timestamp = os.time()
+                        })
+                    end
+                end
+            else
+                if lastMessageId then
+                    local patchResponse = httpRequest({
+                        Url = DISCORD_WEBHOOK .. "/messages/" .. tostring(lastMessageId),
+                        Method = "PATCH",
+                        Headers = { ["Content-Type"] = "application/json" },
+                        Body = HttpService:JSONEncode(payload)
+                    })
+                    if not (patchResponse and patchResponse.StatusCode == 200) then
+                        local response = httpRequest({
+                            Url = DISCORD_WEBHOOK .. "?wait=true",
+                            Method = "POST",
+                            Headers = { ["Content-Type"] = "application/json" },
+                            Body = HttpService:JSONEncode(payload)
+                        })
+                        if response and response.Body then
+                            local successDecode, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
+                            if successDecode and data and data.id then
+                                lastMessageId = data.id
+                                saveState({
+                                    messageId = data.id,
+                                    weather = rawWeather,
+                                    season = season,
+                                    day = day,
+                                    slot = slotIndex,
+                                    activeHeader = currentActiveHeader,
+                                    timestamp = os.time()
+                                })
+                            end
+                        end
+                    end
+                else
                     local response = httpRequest({
                         Url = DISCORD_WEBHOOK .. "?wait=true",
                         Method = "POST",
@@ -781,28 +868,6 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                                 timestamp = os.time()
                             })
                         end
-                    end
-                end
-            else
-                local response = httpRequest({
-                    Url = DISCORD_WEBHOOK .. "?wait=true",
-                    Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json" },
-                    Body = HttpService:JSONEncode(payload)
-                })
-                if response and response.Body then
-                    local successDecode, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
-                    if successDecode and data and data.id then
-                        lastMessageId = data.id
-                        saveState({
-                            messageId = data.id,
-                            weather = rawWeather,
-                            season = season,
-                            day = day,
-                            slot = slotIndex,
-                            activeHeader = currentActiveHeader,
-                            timestamp = os.time()
-                        })
                     end
                 end
             end
@@ -920,6 +985,17 @@ task.spawn(function()
                         break
                     end
                 end
+            end
+
+            -- Keepalive Heartbeat: Ping Cloud Server every 7 minutes to prevent Render free instance sleep
+            if CLOUD_API_URL and CLOUD_API_URL ~= "" and (os.time() - lastCloudPing) >= 420 then
+                pcall(function()
+                    httpRequest({
+                        Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/",
+                        Method = "GET"
+                    })
+                    lastCloudPing = os.time()
+                end)
             end
 
             sendForecast(nil, nil, false)
