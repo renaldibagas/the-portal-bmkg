@@ -12,13 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PORT=7860
-EXPOSE 7860
+ENV PORT=8080
+EXPOSE 8080
 
-# Hugging Face Spaces requires running as user 1000
-RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user \
-    PATH=/home/user/.local/bin:$PATH
-
-CMD ["gunicorn", "cloud_app:app", "--bind", "0.0.0.0:7860", "--workers", "2", "--timeout", "120"]
+CMD ["sh", "-c", "gunicorn cloud_app:app --bind 0.0.0.0:${PORT:-8080}"]
