@@ -59,19 +59,22 @@ def health():
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.4.1-catbox-direct",
+        "version": "2.5.0-direct-cdn",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
 
 @app.route("/cards/<filename>", methods=["GET"])
 def serve_card(filename):
-    return send_from_directory(CARDS_DIR, filename, mimetype="image/jpeg")
+    res = send_from_directory(CARDS_DIR, filename, mimetype="image/jpeg")
+    res.headers["Cache-Control"] = "public, max-age=86400"
+    res.headers["Access-Control-Allow-Origin"] = "*"
+    return res
 
 @app.route("/api/card/upload", methods=["POST"])
 def render_and_upload():
     """
-    Renders the anime weather card and uploads it to CDN (Catbox / Litterbox / Render direct).
-    Returns direct image URL that Discord embeds immediately with full dimensions!
+    Renders the anime weather card and serves it directly from the cloud instance.
+    Returns direct image URL that Discord embeds immediately with 1080x1680 dimensions!
     """
     try:
         payload = request.get_json(force=True) or {}
@@ -81,26 +84,27 @@ def render_and_upload():
         buf.seek(0)
         img_bytes = buf.getvalue()
 
-        # Always save a local copy for direct serving fallback
-        file_id = f"card_{uuid.uuid4().hex[:10]}.jpg"
+        # Save unique card and latest.jpg for live viewing
+        weather_slug = payload.get("weather_type", "weather").lower()
+        file_id = f"card_{int(datetime.datetime.utcnow().timestamp())}_{weather_slug}_{uuid.uuid4().hex[:6]}.jpg"
+        
         local_path = os.path.join(CARDS_DIR, file_id)
         with open(local_path, "wb") as f:
             f.write(img_bytes)
 
-        # Also save latest.jpg
         latest_path = os.path.join(CARDS_DIR, "latest.jpg")
         with open(latest_path, "wb") as f:
             f.write(img_bytes)
 
-        # Upload to CDN for fastest Discord unfurling
-        cdn_url = upload_card_to_cdn(img_bytes, base_name="weather_card.jpg")
-        if not cdn_url:
-            host_url = request.host_url.rstrip("/")
-            cdn_url = f"{host_url}/cards/{file_id}"
+        # Host URL (auto-detect or default to official Render domain)
+        host_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://the-portal-bmkg.onrender.com"
+        card_url = f"{host_url.rstrip('/')}/cards/{file_id}"
+
+        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎨 Card generated: {card_url}")
 
         return jsonify({
             "status": "success",
-            "image_url": cdn_url
+            "image_url": card_url
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
