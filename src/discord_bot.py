@@ -15,6 +15,10 @@ from typing import Optional
 
 import discord
 from discord.ext import commands
+try:
+    from discord import app_commands
+except ImportError:
+    app_commands = None
 
 from src.weather_card_generator import WeatherCardGenerator
 from src.game_data_engine import (
@@ -26,11 +30,24 @@ from src.game_data_engine import (
     get_next_weekly_boss_schedule
 )
 
-DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
+# Load token securely from environment or local .env file
+def get_bot_token():
+    token = os.environ.get("DISCORD_BOT_TOKEN")
+    if token:
+        return token
+    env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("DISCORD_BOT_TOKEN="):
+                    return line.strip().split("=", 1)[1].strip("\"'")
+    return ""
+
+DISCORD_BOT_TOKEN = get_bot_token()
 LATEST_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bmkg_latest_state.json")
 
 # Discord.py 1.7 vs 2.x compatibility
-HAS_SLASH_TREE = hasattr(discord, "app_commands")
+HAS_SLASH_TREE = hasattr(discord, "app_commands") and app_commands is not None
 
 intents = discord.Intents.default()
 if hasattr(intents, "message_content"):
