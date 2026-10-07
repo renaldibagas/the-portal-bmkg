@@ -722,9 +722,8 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
     if httpRequest and isCurrentInstance() then
         -- -------------------------------------------------------------
-        -- CLOUD IMAGE GENERATOR BRIDGE (With Auto-Fallback)
+        -- CLOUD IMAGE GENERATOR BRIDGE (Fetches Anime Card from Render)
         -- -------------------------------------------------------------
-        local sentViaCloud = false
         if CLOUD_API_URL and CLOUD_API_URL ~= "" then
             -- Collect readable modifiers list for card chips
             local modChips = {}
@@ -759,30 +758,26 @@ local function sendForecast(statusMsg, targetRoleId, forceNewMessage)
                 rain_index = string.format("%.1f", rainInt or 0),
                 indoor_status = isIndoors and "Indoors / Sheltered 🏠" or "Open Sky / Outdoors 🏞️",
                 active_modifiers = modChips,
-                odds = oddsTuples,
-                role_ping = targetRoleId and string.format("<@&%s>", targetRoleId) or "",
-                alert_reason = statusMsg or "BMKG Weather Radar",
-                description = bmkgQuote,
-                color = embedColor,
-                webhook_url = DISCORD_WEBHOOK
+                odds = oddsTuples
             }
 
             pcall(function()
                 local cRes = httpRequest({
-                    Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/weather",
+                    Url = string.gsub(CLOUD_API_URL, "/+$", "") .. "/api/card/upload",
                     Method = "POST",
                     Headers = { ["Content-Type"] = "application/json" },
                     Body = HttpService:JSONEncode(cloudPayload)
                 })
-                if cRes and (cRes.StatusCode == 200 or cRes.StatusCode == 204) then
-                    sentViaCloud = true
-                    lastCloudPing = os.time()
+                if cRes and cRes.Body then
+                    local sDec, decData = pcall(HttpService.JSONDecode, HttpService, cRes.Body)
+                    if sDec and decData and decData.image_url then
+                        -- Attach the high-resolution generated anime card to the Discord embed
+                        payload.embeds[1].image = { url = decData.image_url }
+                        lastCloudPing = os.time()
+                    end
                 end
             end)
         end
-
-        -- If not dispatched via cloud (or cloud disabled/down), fallback to direct Discord embed
-        if not sentViaCloud then
             if forceNewMessage or targetRoleId then
                 if lastMessageId then
                     pcall(function()
