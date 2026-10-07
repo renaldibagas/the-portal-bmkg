@@ -20,9 +20,49 @@ def health():
     return jsonify({
         "status": "online",
         "service": "BMKG Weather Card Cloud Generator",
-        "version": "2.2.0-resilient",
+        "version": "2.3.0-hybrid",
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
+
+@app.route("/api/card/upload", methods=["POST"])
+def render_and_upload():
+    """
+    Renders the anime weather card and uploads it to tmpfiles CDN.
+    Returns:
+    {
+        "status": "success",
+        "image_url": "https://tmpfiles.org/dl/...",
+        "weather_type": "...",
+        "embed": { ... }
+    }
+    This allows Roblox (or any client) to immediately dispatch the embed
+    directly to Discord without datacenter IP blocks!
+    """
+    try:
+        payload = request.get_json(force=True) or {}
+        img = generator.render(payload)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        img_bytes = buf.getvalue()
+
+        tmp_res = requests.post(
+            "https://tmpfiles.org/api/v1/upload",
+            files={"file": ("weather_card.png", img_bytes, "image/png")},
+            timeout=25
+        )
+        if tmp_res.status_code == 200:
+            res_data = tmp_res.json()
+            raw_url = res_data.get("data", {}).get("url", "")
+            direct_img_url = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+            return jsonify({
+                "status": "success",
+                "image_url": direct_img_url
+            })
+        else:
+            return jsonify({"status": "error", "detail": f"CDN upload failed: {tmp_res.text}"}), 502
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 @app.route("/api/weather", methods=["POST"])
 def handle_weather():
