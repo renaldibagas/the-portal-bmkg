@@ -240,6 +240,20 @@ def build_help_embed():
     embed.set_footer(text="BMKG Lazie • Powered by Roblox Observatory Client")
     return embed
 
+WEATHER_CHANNEL_ID = 1540058829356540094
+
+def is_weather_channel(channel) -> bool:
+    """Returns True ONLY for the dedicated weather radar channel."""
+    if not channel:
+        return False
+    if getattr(channel, "id", None) == WEATHER_CHANNEL_ID:
+        return True
+    ch_name = getattr(channel, "name", "").lower()
+    # Matches 'weather' or 'cuaca', but excludes 'roles-weather'
+    if ch_name in ["weather", "cuaca", "bmkg-weather"] or ("weather" in ch_name and "role" not in ch_name):
+        return True
+    return False
+
 async def purge_channel_messages(channel, limit: int = 100):
     """Purges prior messages in the channel to leave only the fresh radar intact."""
     try:
@@ -262,8 +276,9 @@ async def purge_channel_messages(channel, limit: int = 100):
 # ============================================================
 @bot.command(name="weather")
 async def cmd_prefix_weather(ctx):
-    # Purge old messages in the channel first, leaving only the fresh one
-    await purge_channel_messages(ctx.channel)
+    # Only purge messages if used inside the dedicated weather channel
+    if is_weather_channel(ctx.channel):
+        await purge_channel_messages(ctx.channel)
     embed, f = build_weather_embed_and_file()
     await ctx.send(embed=embed, file=f)
 
@@ -302,17 +317,16 @@ if HAS_SLASH_TREE:
     async def slash_weather(interaction: discord.Interaction):
         await interaction.response.defer()
         
-        # Get interaction placeholder message so we never delete our own response
-        resp_msg_id = None
-        try:
-            resp_msg = await interaction.original_response()
-            if resp_msg:
-                resp_msg_id = resp_msg.id
-        except Exception:
-            pass
+        # Only purge messages if executed inside the dedicated weather channel
+        if is_weather_channel(interaction.channel):
+            resp_msg_id = None
+            try:
+                resp_msg = await interaction.original_response()
+                if resp_msg:
+                    resp_msg_id = resp_msg.id
+            except Exception:
+                pass
 
-        # Purge other channel messages if bot has permission
-        if interaction.channel:
             try:
                 async for msg in interaction.channel.history(limit=50):
                     if resp_msg_id and msg.id == resp_msg_id:
