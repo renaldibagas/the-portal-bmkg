@@ -59,13 +59,33 @@ generator = WeatherCardGenerator()
 
 def load_latest_telemetry() -> dict:
     """Reads the latest live telemetry reported by the Roblox client."""
+    # 1. Local state file check
     if os.path.exists(LATEST_DATA_PATH):
         try:
             with open(LATEST_DATA_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                d = json.load(f)
+                if d and "weather_type" in d:
+                    return d
         except Exception:
             pass
-    # Fallback to calculated mathematical state if Roblox client is temporarily offline
+
+    # 2. Cross-cloud telemetry sync (fetches directly from active web service)
+    import requests
+    sync_endpoints = [
+        "https://web-production-2cdb.up.railway.app/api/telemetry/latest",
+        "https://the-portal-bmkg.onrender.com/api/telemetry/latest"
+    ]
+    for endpoint in sync_endpoints:
+        try:
+            r = requests.get(endpoint, timeout=2.0)
+            if r.status_code == 200:
+                d = r.json()
+                if d and "weather_type" in d:
+                    return d
+        except Exception:
+            pass
+
+    # 3. Fallback to calculated mathematical state if Roblox client is temporarily offline
     s_state = get_current_season_state()
     odds = get_seasonal_odds(s_state["season"], s_state["season_day"])
     top_weather = odds[0][0] if odds else "Dry"
@@ -87,7 +107,6 @@ def build_weather_embed_and_file():
     data = load_latest_telemetry()
     w_type = data.get("weather_type", "Dry")
     w_color = WEATHER_COLORS.get(w_type, 0x3498DB)
-    w_name = WEATHER_DISPLAY_NAMES.get(w_type, w_type)
     
     img = generator.render(data)
     buf = io.BytesIO()
@@ -96,15 +115,14 @@ def build_weather_embed_and_file():
     
     discord_file = discord.File(buf, filename="weather_card.jpg")
     embed = discord.Embed(
-        title=f"📡 BMKG Observatory Radar • {w_name}",
-        description=f"> 🌍 **Season:** `{data.get('season')} (Day {data.get('season_day')}/4)`\n"
-                    f"> ⏰ **Weather Slot:** `{data.get('slot_index')}/6` • Rolls every 2 Hours\n"
-                    f"> 🌐 **Server:** `[{data.get('server_id', 'Online')[:8]}]`",
         color=w_color,
         timestamp=datetime.datetime.utcnow()
     )
     embed.set_image(url="attachment://weather_card.jpg")
-    embed.set_footer(text="Badan Meteorologi Klimatologi dan Gacha (BMKG) • 24/7 Observatory")
+    embed.set_footer(
+        text="Badan Meteorologi Klimatologi dan Gacha (BMKG) • 24/7 Observatory",
+        icon_url="https://i.imgur.com/K3Z97fG.png"
+    )
     return embed, discord_file
 
 def build_gacha_embed():

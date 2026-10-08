@@ -177,8 +177,13 @@ def render_and_upload():
         except Exception as se:
             print(f"[Warning] Failed to save latest telemetry: {se}")
 
-        # Host URL (auto-detect or default to official Render domain)
-        host_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://the-portal-bmkg.onrender.com"
+        # Host URL (auto-detect across Railway, Render, or fallback)
+        railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+        if railway_domain:
+            host_url = f"https://{railway_domain}"
+        else:
+            host_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://web-production-2cdb.up.railway.app"
+
         card_url = f"{host_url.rstrip('/')}/cards/{file_id}"
 
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎨 Card generated: {card_url}")
@@ -189,6 +194,20 @@ def render_and_upload():
         })
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
+
+@app.route("/api/telemetry/latest", methods=["GET"])
+def get_latest_telemetry():
+    """Serves the latest live telemetry reported by Roblox to all bot instances."""
+    state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmkg_latest_state.json")
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, "r", encoding="utf-8") as sf:
+                return jsonify(json.load(sf))
+        except Exception:
+            pass
+    return jsonify({"error": "No telemetry recorded yet"}), 404
+
+
 
 @app.route("/api/weather", methods=["POST"])
 def handle_weather():
