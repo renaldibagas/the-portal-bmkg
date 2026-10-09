@@ -124,15 +124,20 @@ SEASONAL_ODDS = {
     }
 }
 
+SEASON_EPOCH_UNIX = 1785542400 # Scraped from Constants.Season.EpochUnix
 TOTAL_YEAR_CYCLE_SECONDS = 691200 # 8 Real Days
 WEATHER_SLOT_SECONDS = 7200 # 2 Real Hours per weather slot
+REAL_SECONDS_PER_DAY = 43200 # 12 Real Hours per season day (6 slots * 7200s)
 
 def get_current_season_state(epoch_time: float = None) -> Dict[str, Any]:
-    """Calculates active season, season day (1-4), and cycle position."""
+    """Calculates active season, season day (1-4), and cycle position using exact Roblox Constants."""
     if epoch_time is None:
         epoch_time = time.time()
     
-    pos = (epoch_time % TOTAL_YEAR_CYCLE_SECONDS) / float(TOTAL_YEAR_CYCLE_SECONDS)
+    elapsed = (epoch_time - SEASON_EPOCH_UNIX) % TOTAL_YEAR_CYCLE_SECONDS
+    if elapsed < 0:
+        elapsed += TOTAL_YEAR_CYCLE_SECONDS
+    pos = elapsed / float(TOTAL_YEAR_CYCLE_SECONDS)
     
     # 4 seasons: Spring (0.00-0.25), Summer (0.25-0.50), Autumn (0.50-0.75), Winter (0.75-1.00)
     seasons = ["Spring", "Summer", "Autumn", "Winter"]
@@ -148,9 +153,8 @@ def get_current_season_state(epoch_time: float = None) -> Dict[str, Any]:
     slot_index = int(day_fraction * 6) + 1
     slot_index = max(1, min(6, slot_index))
     
-    # Calculate seconds remaining in active slot
-    seconds_in_day = int(epoch_time) % 86400
-    slot_sec = seconds_in_day % WEATHER_SLOT_SECONDS
+    # Calculate seconds remaining in active 2-hour slot
+    slot_sec = int(elapsed) % WEATHER_SLOT_SECONDS
     rem_in_slot = WEATHER_SLOT_SECONDS - slot_sec
     
     return {

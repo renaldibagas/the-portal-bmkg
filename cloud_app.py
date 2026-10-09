@@ -171,6 +171,8 @@ def render_and_upload():
 
         # Persist latest telemetry payload so Discord slash commands have real-time game data
         try:
+            global _latest_telemetry_cache
+            _latest_telemetry_cache = payload
             state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmkg_latest_state.json")
             with open(state_file, "w", encoding="utf-8") as sf:
                 json.dump(payload, sf, indent=2)
@@ -195,19 +197,61 @@ def render_and_upload():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 500
 
+_latest_telemetry_cache = {}
+
+@app.route("/api/telemetry", methods=["POST"])
+def post_telemetry():
+    """Endpoint for Roblox client or scraper to push state updates without generating a full card."""
+    global _latest_telemetry_cache
+    try:
+        payload = request.get_json(force=True) or {}
+        _latest_telemetry_cache = payload
+        state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmkg_latest_state.json")
+        with open(state_file, "w", encoding="utf-8") as sf:
+            json.dump(payload, sf, indent=2)
+        return jsonify({"status": "success", "message": "Telemetry updated"})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
 @app.route("/api/telemetry/latest", methods=["GET"])
 def get_latest_telemetry():
     """Serves the latest live telemetry reported by Roblox to all bot instances."""
+    global _latest_telemetry_cache
+    if _latest_telemetry_cache and "weather_type" in _latest_telemetry_cache:
+        return jsonify(_latest_telemetry_cache)
+        
     state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmkg_latest_state.json")
     if os.path.exists(state_file):
         try:
             with open(state_file, "r", encoding="utf-8") as sf:
-                return jsonify(json.load(sf))
+                data = json.load(sf)
+                if data and "weather_type" in data:
+                    _latest_telemetry_cache = data
+                    return jsonify(data)
         except Exception:
             pass
-    return jsonify({"error": "No telemetry recorded yet"}), 404
 
-
+    # Fallback to calculated current season state
+    try:
+        from src.game_data_engine import get_current_season_state, get_seasonal_odds, WEATHER_DISPLAY_NAMES, WEATHER_EFFECTS
+        s_state = get_current_season_state()
+        odds = get_seasonal_odds(s_state["season"], s_state["season_day"])
+        top_weather = odds[0][0] if odds else "Dry"
+        fallback_data = {
+            "weather_type": top_weather,
+            "weather_display": WEATHER_DISPLAY_NAMES.get(top_weather, top_weather),
+            "season": s_state["season"],
+            "season_day": s_state["season_day"],
+            "slot_index": s_state["slot_index"],
+            "server_id": "Synchronized",
+            "in_game_clock": "12:00 PM",
+            "temp_display": "31°",
+            "active_modifiers": [WEATHER_EFFECTS.get(top_weather, {}).get("notes", "Normal Conditions")],
+            "odds": [(name, name, pct) for name, pct in odds]
+        }
+        return jsonify(fallback_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/weather", methods=["POST"])
 def handle_weather():
@@ -215,6 +259,16 @@ def handle_weather():
         payload = request.get_json(force=True)
         if not payload:
             return jsonify({"error": "No JSON payload provided"}), 400
+
+        # Save latest telemetry
+        global _latest_telemetry_cache
+        _latest_telemetry_cache = payload
+        try:
+            state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bmkg_latest_state.json")
+            with open(state_file, "w", encoding="utf-8") as sf:
+                json.dump(payload, sf, indent=2)
+        except Exception:
+            pass
 
         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 📸 Rendering weather card for: {payload.get('weather_type', 'Unknown')}")
 

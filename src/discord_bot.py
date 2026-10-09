@@ -59,6 +59,16 @@ generator = WeatherCardGenerator()
 
 def load_latest_telemetry() -> dict:
     """Reads the latest live telemetry reported by the Roblox client."""
+    # 0. In-memory cache check (when running embedded inside cloud_app.py)
+    try:
+        import sys
+        if "cloud_app" in sys.modules:
+            ca = sys.modules["cloud_app"]
+            if hasattr(ca, "_latest_telemetry_cache") and ca._latest_telemetry_cache and "weather_type" in ca._latest_telemetry_cache:
+                return ca._latest_telemetry_cache
+    except Exception:
+        pass
+
     # 1. Local state file check
     if os.path.exists(LATEST_DATA_PATH):
         try:

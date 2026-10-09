@@ -150,6 +150,9 @@ class WeatherCardGenerator:
         self.font_pill_temp = get_font(bold_paths, 24)
         self.font_micro     = get_font(font_paths, 13)
         self.font_micro_bold= get_font(bold_paths, 13)
+        self.font_stat_val  = get_font(bold_paths, 16)
+        self.font_stat_hdr  = get_font(bold_paths, 14)
+        self.font_stat_sub  = get_font(font_paths, 11)
 
 
     def _draw_gradient(self, draw: ImageDraw.ImageDraw, color_top, color_bottom):
@@ -311,7 +314,7 @@ class WeatherCardGenerator:
         draw_ov.rounded_rectangle([x0, y0, x1, y1], radius=radius, fill=fill_color, outline=border_color, width=2)
         base_img.alpha_composite(overlay)
 
-    def _draw_buff_chip(self, base_img: Image.Image, draw: ImageDraw.ImageDraw, x0: int, y0: int, label: str, buff_type: str = "neutral"):
+    def _draw_buff_chip(self, base_img: Image.Image, draw: ImageDraw.ImageDraw, x0: int, y0: int, label: str, buff_type: str = "neutral", max_width: int = None):
         """
         Draws a crisp colored status chip:
         - 'positive': Green background + Green text (#00E676)
@@ -328,7 +331,9 @@ class WeatherCardGenerator:
             th = 18
 
         chip_w = tw + 24
-        chip_h = 34
+        if max_width and chip_w > max_width:
+            chip_w = max_width
+        chip_h = 32
         x1 = x0 + chip_w
         y1 = y0 + chip_h
 
@@ -879,14 +884,23 @@ class WeatherCardGenerator:
         self._draw_glass_card(img, right_x0, mod_y0, right_x1, mod_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"], blur_radius=6)
         draw = ImageDraw.Draw(img)
-        draw.text((right_x0 + 40, mod_y0 + 20), "MARKET & ADVENTURER MODIFIERS", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((right_x1 - 40, mod_y0 + 24), "Active Realm Buffs & Prices", font=self.font_small, fill=theme["sub_text"], anchor="ra")
+        draw.text((right_x0 + 36, mod_y0 + 18), "MARKET & ADVENTURER MODIFIERS", font=self.font_title, fill=(255, 255, 255, 245))
+        draw.text((right_x1 - 36, mod_y0 + 22), "Active Realm Buffs & Prices", font=self.font_small, fill=theme["sub_text"], anchor="ra")
 
         active_mods = data.get("active_modifiers", [])
-        chip_start_x = right_x0 + 40
         if active_mods:
-            chip_y = mod_y0 + 64
-            for mod_str in active_mods[:6]:
+            # 2-column grid layout so 4, 6, or 8 buffs NEVER exceed the card boundaries
+            col_gap = 16
+            col_w = (right_x1 - right_x0 - 72 - col_gap) // 2  # ~370px per column
+            col1_x = right_x0 + 36
+            col2_x = col1_x + col_w + col_gap
+            
+            for idx, mod_str in enumerate(active_mods[:8]):
+                col_idx = idx % 2
+                row_idx = idx // 2
+                bx = col2_x if col_idx == 1 else col1_x
+                by = mod_y0 + 58 + row_idx * 38
+                
                 m_low = mod_str.lower()
                 if any(k in m_low for k in ["auto-water", "lumen", "upgrade", "exp", "monster", "mining", "mineral", "fish", "unlocked", "sale", "+"]):
                     if "shop +" in m_low or "inflation" in m_low:
@@ -897,123 +911,172 @@ class WeatherCardGenerator:
                     b_type = "negative"
                 else:
                     b_type = "positive"
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y, mod_str, buff_type=b_type)
-                chip_y += 46
+                
+                self._draw_buff_chip(img, draw, bx, by, mod_str, buff_type=b_type, max_width=col_w)
         else:
-            chip_y1 = mod_y0 + 66
+            col_gap = 16
+            col_w = (right_x1 - right_x0 - 72 - col_gap) // 2
+            col1_x = right_x0 + 36
+            col2_x = col1_x + col_w + col_gap
+            
             price_val = data.get("price_val", 0)
             if price_val > 0:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y1, f"Shop +{price_val}% (Surcharge)", buff_type="negative")
+                self._draw_buff_chip(img, draw, col1_x, mod_y0 + 58, f"Shop +{price_val}% (Surcharge)", buff_type="negative", max_width=col_w)
             elif price_val < 0:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y1, f"Shop {price_val}% Sale", buff_type="positive")
+                self._draw_buff_chip(img, draw, col1_x, mod_y0 + 58, f"Shop {price_val}% Sale", buff_type="positive", max_width=col_w)
             else:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y1, "Shop 1.0x Normal (Standard Prices)", buff_type="neutral")
+                self._draw_buff_chip(img, draw, col1_x, mod_y0 + 58, "Shop 1.0x Normal (Standard Prices)", buff_type="neutral", max_width=col_w)
             
-            chip_y2 = mod_y0 + 114
             dmg_val = data.get("damage_val", 0)
             if dmg_val > 0:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y2, f"Damage +{dmg_val}%", buff_type="positive")
+                self._draw_buff_chip(img, draw, col2_x, mod_y0 + 58, f"Damage +{dmg_val}%", buff_type="positive", max_width=col_w)
             elif dmg_val < 0:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y2, f"Damage {dmg_val}%", buff_type="negative")
+                self._draw_buff_chip(img, draw, col2_x, mod_y0 + 58, f"Damage {dmg_val}%", buff_type="negative", max_width=col_w)
             else:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y2, "Combat Multipliers: 1.0x Normal", buff_type="neutral")
+                self._draw_buff_chip(img, draw, col2_x, mod_y0 + 58, "Combat Multipliers: 1.0x Normal", buff_type="neutral", max_width=col_w)
 
-            chip_y3 = mod_y0 + 162
             spd_val = data.get("speed_val", 0)
             if spd_val > 0:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y3, f"Speed +{spd_val}%", buff_type="positive")
+                self._draw_buff_chip(img, draw, col1_x, mod_y0 + 98, f"Speed +{spd_val}%", buff_type="positive", max_width=col_w)
             elif spd_val < 0:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y3, f"Speed {spd_val}%", buff_type="negative")
+                self._draw_buff_chip(img, draw, col1_x, mod_y0 + 98, f"Speed {spd_val}%", buff_type="negative", max_width=col_w)
             else:
-                self._draw_buff_chip(img, draw, chip_start_x, chip_y3, "Movement Speed: 1.0x Normal", buff_type="neutral")
+                self._draw_buff_chip(img, draw, col1_x, mod_y0 + 98, "Movement Speed: 1.0x Normal", buff_type="neutral", max_width=col_w)
 
-        # 3. 24H Weather Gacha Forecast (Bottom of Right Panel)
+        # 3. 24H Weather Gacha Forecast (2H, 4H, 8H, 12H, 24H Multi-Horizon Stats)
         gacha_y0 = mod_y1 + 18
         gacha_y1 = right_y1
         self._draw_glass_card(img, right_x0, gacha_y0, right_x1, gacha_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"], blur_radius=6)
         draw = ImageDraw.Draw(img)
-        draw.text((right_x0 + 40, gacha_y0 + 20), "24H Weather Gacha Forecast", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((right_x1 - 40, gacha_y0 + 24), f"🎲 Next 2-Hour Roll Chances (in {countdown_str})", font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
+        draw.text((right_x0 + 36, gacha_y0 + 16), "24H Weather Gacha Forecast", font=self.font_title, fill=(255, 255, 255, 245))
+        draw.text((right_x1 - 36, gacha_y0 + 20), "Roll Odds: 2H • 4H • 8H • 12H • 24H", font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
 
+        # Table Column Geometry across 763px usable card width
+        tbl_x0 = right_x0 + 36
+        tbl_x1 = right_x1 - 36
+        name_col_w = 215
+        
+        time_cols = [
+            ("2 Hours", 1),
+            ("4 Hours", 2),
+            ("8 Hours", 4),
+            ("12 Hours", 6),
+            ("24 Hours", 12),
+        ]
+        num_time = len(time_cols)
+        col_w = (tbl_x1 - (tbl_x0 + name_col_w)) // num_time
+        time_centers = [tbl_x0 + name_col_w + i * col_w + (col_w // 2) for i in range(num_time)]
+
+        # Header Bar
+        hdr_y0 = gacha_y0 + 48
+        hdr_y1 = hdr_y0 + 26
+        draw.rounded_rectangle([tbl_x0, hdr_y0, tbl_x1, hdr_y1], radius=6, fill=(20, 34, 58, 195), outline=(75, 120, 185, 90), width=1)
+        draw.text((tbl_x0 + 16, hdr_y0 + 5), "WEATHER EVENT", font=self.font_stat_hdr, fill=(175, 210, 255, 235))
+        
+        for i, (col_label, _) in enumerate(time_cols):
+            cx = time_centers[i]
+            draw.text((cx, hdr_y0 + 5), col_label.upper(), font=self.font_stat_hdr, fill=(175, 210, 255, 235), anchor="mt")
+
+        # Odds Data
         odds = data.get("odds", [
-            ["Dry", "Dry", 38],
-            ["Rain", "Rain", 20],
-            ["Heavy Rain", "HeavyRain", 16],
-            ["Windy", "Windy", 13],
-            ["Drizzle", "Drizzle", 8],
-            ["Gale", "Gale", 5],
-            ["Nightmare", "Nightmare", 0],
-            ["Northern Lights", "NorthernLights", 0]
+            ["Rain", "Rain", 30],
+            ["Heavy Rain", "HeavyRain", 22],
+            ["Drizzle", "Drizzle", 14],
+            ["Windy", "Windy", 12],
+            ["Dry", "Dry", 10],
+            ["Gale", "Gale", 6],
+            ["Nightmare", "Nightmare", 10]
         ])
 
-        # 2-column layout for gacha bars with generous padding from card edges
-        col_gap = 40
-        half_w = (right_x1 - right_x0 - 80 - col_gap) // 2
-        col1_x = right_x0 + 40
-        col2_x = col1_x + half_w + col_gap
-        
         cur_w_low = weather_type.lower()
         cur_season_low = str(data.get("season", "")).lower()
 
-        for idx, (label, key, pct) in enumerate(odds[:8]):
-            is_col2 = (idx >= 4)
-            row_idx = idx % 4
-            bx0 = col2_x if is_col2 else col1_x
-            by = gacha_y0 + 64 + row_idx * 52
+        # Cumulative probability: P_n = 1 - (1 - p)^n
+        def calc_cum_pct(p_pct, rolls):
+            p = max(0.0, min(100.0, float(p_pct))) / 100.0
+            if p <= 0:
+                return 0
+            return int(round((1.0 - math.pow(1.0 - p, rolls)) * 100.0))
+
+        # Render Weather Rows (up to 7 weathers)
+        row_start_y = hdr_y1 + 6
+        row_h = 34
+        row_gap = 4
+        
+        for idx, (label, key, pct) in enumerate(odds[:7]):
+            ry0 = row_start_y + idx * (row_h + row_gap)
+            ry1 = ry0 + row_h
             
             k_low = str(key).lower()
             is_active_now = (k_low in cur_w_low or cur_w_low in k_low)
-
+            
             pct_val = int(pct) if isinstance(pct, (int, float)) else 0
-            is_live_badge = False
-
-            # Active live weather always gets LIVE badge
-            if is_active_now:
-                is_live_badge = True
-                pct_str = "LIVE"
-                pct_val = 100
-            elif "nightmare" in k_low:
-                if "autumn" in cur_season_low or pct_val <= 0:
-                    pct_val = 10  # 10% base Event roll chance
-                pct_str = f"{pct_val}%"
-            elif "northern" in k_low:
-                if "summer" in cur_season_low or pct_val <= 0:
-                    pct_val = 10  # 10% base Event roll chance
-                pct_str = f"{pct_val}%"
-            else:
-                pct_str = f"{pct_val}%"
-
-            # Weather Icon
-            self._draw_weather_icon(draw, bx0 + 14, by + 10, key, size=24)
-            # Weather Label
-            draw.text((bx0 + 36, by + 1), str(label), font=self.font_small_bold, fill=(240, 248, 255, 235))
-            
-            # Pct Label
-            if is_live_badge:
-                badge_col = (255, 90, 110, 255) if "nightmare" in k_low else (0, 255, 190, 255)
-                draw.text((bx0 + half_w, by + 1), "LIVE", font=self.font_small_bold, fill=badge_col, anchor="ra")
-            else:
-                draw.text((bx0 + half_w, by + 1), pct_str, font=self.font_small_bold, fill=(140, 220, 255, 245), anchor="ra")
-            
-            # Progress bar
-            bar_len = half_w - 36
-            bar_start = bx0 + 36
-            draw.rounded_rectangle([bar_start, by + 22, bar_start + bar_len, by + 30], radius=4, fill=(40, 56, 88, 175))
-            if pct_val > 0:
-                if is_live_badge:
-                    fill_w = bar_len
-                else:
-                    fill_w = max(10, int(bar_len * (pct_val / 50.0)))
+            if "nightmare" in k_low and ("autumn" in cur_season_low or pct_val <= 0):
+                pct_val = 10
+            elif "northern" in k_low and ("summer" in cur_season_low or pct_val <= 0):
+                pct_val = 10
                 
-                if "northern" in k_low:
-                    bar_color = (0, 245, 185, 255)
-                elif "nightmare" in k_low:
-                    bar_color = (255, 60, 85, 255)
-                elif pct_val > 15:
-                    bar_color = (100, 205, 255, 245)
+            # Row Background styling
+            if is_active_now:
+                if "nightmare" in k_low:
+                    r_fill, r_bord = (85, 18, 30, 205), (255, 75, 95, 225)
+                elif "northern" in k_low:
+                    r_fill, r_bord = (16, 68, 62, 205), (0, 255, 195, 225)
                 else:
-                    bar_color = (75, 145, 225, 205)
-                draw.rounded_rectangle([bar_start, by + 22, bar_start + fill_w, by + 30], radius=4, fill=bar_color)
+                    r_fill, r_bord = (32, 72, 130, 205), (130, 240, 255, 225)
+                draw.rounded_rectangle([tbl_x0, ry0, tbl_x1, ry1], radius=8, fill=r_fill, outline=r_bord, width=1)
+            else:
+                bg_col = (20, 32, 54, 115) if idx % 2 == 1 else (15, 24, 42, 65)
+                draw.rounded_rectangle([tbl_x0, ry0, tbl_x1, ry1], radius=8, fill=bg_col)
+
+            # Weather Icon & Label
+            self._draw_weather_icon(draw, tbl_x0 + 16, ry0 + 17, key, size=22)
+            lbl_col = (255, 255, 255, 255) if is_active_now else (230, 242, 255, 235)
+            draw.text((tbl_x0 + 34, ry0 + 7), str(label), font=self.font_small_bold, fill=lbl_col)
+            
+            if is_active_now:
+                # Small LIVE badge next to label
+                badge_bg = (255, 60, 85, 230) if "nightmare" in k_low else (0, 230, 175, 230)
+                badge_x0 = tbl_x0 + 148
+                draw.rounded_rectangle([badge_x0, ry0 + 8, badge_x0 + 44, ry0 + 26], radius=4, fill=badge_bg)
+                draw.text((badge_x0 + 22, ry0 + 10), "LIVE", font=self.font_micro_bold, fill=(255, 255, 255, 255), anchor="mt")
+
+            # Render 5 Probability Horizon Columns: 2h, 4h, 8h, 12h, 24h
+            for i, (_, rolls) in enumerate(time_cols):
+                cx = time_centers[i]
+                c_pct = calc_cum_pct(pct_val, rolls)
+                
+                # Dynamic text color scaling
+                if is_active_now:
+                    v_col = (255, 225, 120, 255) if i == 0 else (255, 255, 255, 255)
+                elif c_pct >= 80:
+                    v_col = (110, 255, 180, 255)
+                elif c_pct >= 50:
+                    v_col = (130, 240, 255, 255)
+                elif c_pct >= 25:
+                    v_col = (180, 225, 255, 235)
+                else:
+                    v_col = (195, 215, 240, 205)
+                
+                draw.text((cx, ry0 + 5), f"{c_pct}%", font=self.font_stat_val, fill=v_col, anchor="mt")
+                
+                # Micro Progress Fill Bar beneath percentage
+                bar_w = 48
+                bar_h = 4
+                bx0 = cx - (bar_w // 2)
+                by0 = ry0 + 24
+                draw.rectangle([bx0, by0, bx0 + bar_w, by0 + bar_h], fill=(35, 52, 78, 170))
+                
+                fill_len = max(2, int(bar_w * (c_pct / 100.0)))
+                if "northern" in k_low:
+                    b_col = (0, 245, 185, 230)
+                elif "nightmare" in k_low:
+                    b_col = (255, 65, 90, 230)
+                elif c_pct >= 75:
+                    b_col = (80, 240, 160, 220)
+                else:
+                    b_col = (100, 200, 255, 220)
+                draw.rectangle([bx0, by0, bx0 + fill_len, by0 + bar_h], fill=b_col)
 
         return img
