@@ -353,6 +353,19 @@ class WeatherCardGenerator:
             text_col = (215, 235, 255, 235)
             dot_col = (160, 200, 255, 255)
 
+        disp_label = label
+        if max_width:
+            avail_tw = max_width - 32
+            while len(disp_label) > 4:
+                try:
+                    bb = self.font_chip.getbbox(disp_label)
+                    w = bb[2] - bb[0]
+                except Exception:
+                    w = len(disp_label) * 9
+                if w <= avail_tw:
+                    break
+                disp_label = disp_label[:-2] + "…"
+
         overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         draw_ov = ImageDraw.Draw(overlay)
         draw_ov.rounded_rectangle([x0, y0, x1, y1], radius=10, fill=fill_col, outline=border_col, width=1)
@@ -361,7 +374,7 @@ class WeatherCardGenerator:
         # Indicator dot
         draw.ellipse([x0 + 8, y0 + 13, x0 + 16, y0 + 21], fill=dot_col)
         # Label text
-        draw.text((x0 + 22, y0 + 7), label, font=self.font_chip, fill=text_col)
+        draw.text((x0 + 22, y0 + 7), disp_label, font=self.font_chip, fill=text_col)
 
         return x1 + 10 # return next x coordinate
 
@@ -692,7 +705,7 @@ class WeatherCardGenerator:
         # Weather Condition Display & Weather Vector Icon
         cond_text = data.get("weather_display", "Drizzle • Gentle Rain")
         import re
-        cond_clean = re.sub(r'[\U00010000-\U0010ffff]', '', cond_text).strip()
+        cond_clean = re.sub(r'[^\x20-\x7E]', '', cond_text).strip()
         hero_cx = (left_x0 + left_x1) // 2
         try:
             bbox = self.font_hero_cond.getbbox(cond_clean)
@@ -889,17 +902,22 @@ class WeatherCardGenerator:
 
         active_mods = data.get("active_modifiers", [])
         if active_mods:
-            # 2-column grid layout so 4, 6, or 8 buffs NEVER exceed the card boundaries
+            # 2-column grid layout for 3+ buffs; full width for 1-2 long buffs
+            is_single_col = len(active_mods) <= 2
             col_gap = 16
-            col_w = (right_x1 - right_x0 - 72 - col_gap) // 2  # ~370px per column
+            col_w = (right_x1 - right_x0 - 72) if is_single_col else ((right_x1 - right_x0 - 72 - col_gap) // 2)
             col1_x = right_x0 + 36
             col2_x = col1_x + col_w + col_gap
             
             for idx, mod_str in enumerate(active_mods[:8]):
-                col_idx = idx % 2
-                row_idx = idx // 2
-                bx = col2_x if col_idx == 1 else col1_x
-                by = mod_y0 + 58 + row_idx * 38
+                if is_single_col:
+                    bx = col1_x
+                    by = mod_y0 + 58 + idx * 42
+                else:
+                    col_idx = idx % 2
+                    row_idx = idx // 2
+                    bx = col2_x if col_idx == 1 else col1_x
+                    by = mod_y0 + 58 + row_idx * 38
                 
                 m_low = mod_str.lower()
                 if any(k in m_low for k in ["auto-water", "lumen", "upgrade", "exp", "monster", "mining", "mineral", "fish", "unlocked", "sale", "+"]):
