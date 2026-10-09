@@ -851,30 +851,62 @@ class WeatherCardGenerator:
         col1_x = right_x0 + 40
         col2_x = col1_x + half_w + col_gap
         
+        cur_w_low = weather_type.lower()
+        cur_season_low = str(data.get("season", "")).lower()
+
         for idx, (label, key, pct) in enumerate(odds[:8]):
             is_col2 = (idx >= 4)
             row_idx = idx % 4
             bx0 = col2_x if is_col2 else col1_x
             by = gacha_y0 + 64 + row_idx * 52
             
+            k_low = str(key).lower()
+            is_active_now = (k_low in cur_w_low or cur_w_low in k_low)
+
+            pct_val = int(pct) if isinstance(pct, (int, float)) else 0
+            is_live_badge = False
+
+            # Active live weather always gets LIVE badge
+            if is_active_now:
+                is_live_badge = True
+                pct_str = "LIVE"
+                pct_val = 100
+            elif "nightmare" in k_low:
+                if "autumn" in cur_season_low or pct_val <= 0:
+                    pct_val = 10  # 10% base Event roll chance
+                pct_str = f"{pct_val}%"
+            elif "northern" in k_low:
+                if "summer" in cur_season_low or pct_val <= 0:
+                    pct_val = 10  # 10% base Event roll chance
+                pct_str = f"{pct_val}%"
+            else:
+                pct_str = f"{pct_val}%"
+
             # Weather Icon
             self._draw_weather_icon(draw, bx0 + 14, by + 10, key, size=24)
             # Weather Label
             draw.text((bx0 + 36, by + 1), str(label), font=self.font_small_bold, fill=(240, 248, 255, 235))
-            # Pct
-            pct_val = int(pct) if isinstance(pct, (int, float)) else 0
-            pct_str = f"{pct_val}%"
-            draw.text((bx0 + half_w, by + 1), pct_str, font=self.font_small_bold, fill=(140, 220, 255, 245), anchor="ra")
+            
+            # Pct Label
+            if is_live_badge:
+                badge_col = (255, 90, 110, 255) if "nightmare" in k_low else (0, 255, 190, 255)
+                draw.text((bx0 + half_w, by + 1), "LIVE", font=self.font_small_bold, fill=badge_col, anchor="ra")
+            else:
+                draw.text((bx0 + half_w, by + 1), pct_str, font=self.font_small_bold, fill=(140, 220, 255, 245), anchor="ra")
             
             # Progress bar
             bar_len = half_w - 36
             bar_start = bx0 + 36
             draw.rounded_rectangle([bar_start, by + 22, bar_start + bar_len, by + 30], radius=4, fill=(40, 56, 88, 175))
             if pct_val > 0:
-                fill_w = max(10, int(bar_len * (pct_val / 50.0)))
-                if "northern" in key.lower():
+                if is_live_badge:
+                    fill_w = bar_len
+                else:
+                    fill_w = max(10, int(bar_len * (pct_val / 50.0)))
+                
+                if "northern" in k_low:
                     bar_color = (0, 245, 185, 255)
-                elif "nightmare" in key.lower():
+                elif "nightmare" in k_low:
                     bar_color = (255, 60, 85, 255)
                 elif pct_val > 15:
                     bar_color = (100, 205, 255, 245)

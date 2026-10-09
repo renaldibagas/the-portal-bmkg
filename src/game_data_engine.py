@@ -99,16 +99,16 @@ WEATHER_EFFECTS = {
 
 SEASONAL_ODDS = {
     "Summer": {
-        1: [("Dry", 48), ("NormalRain", 14), ("HeavyRain", 10), ("Windy", 9), ("Drizzle", 16), ("Gale", 3), ("Snow", 0)],
-        2: [("Dry", 42), ("HeavyRain", 18), ("NormalRain", 14), ("Windy", 13), ("Drizzle", 8), ("Gale", 5), ("Snow", 0)],
-        3: [("Dry", 40), ("HeavyRain", 22), ("Windy", 14), ("NormalRain", 13), ("Drizzle", 6), ("Gale", 5), ("Snow", 0)],
-        4: [("Dry", 38), ("NormalRain", 20), ("HeavyRain", 16), ("Windy", 13), ("Drizzle", 8), ("Gale", 5), ("Snow", 0)]
+        1: [("Dry", 48), ("NormalRain", 14), ("HeavyRain", 10), ("Windy", 9), ("Drizzle", 16), ("Gale", 3), ("NorthernLights", 10)],
+        2: [("Dry", 42), ("HeavyRain", 18), ("NormalRain", 14), ("Windy", 13), ("Drizzle", 8), ("Gale", 5), ("NorthernLights", 10)],
+        3: [("Dry", 40), ("HeavyRain", 22), ("Windy", 14), ("NormalRain", 13), ("Drizzle", 6), ("Gale", 5), ("NorthernLights", 10)],
+        4: [("Dry", 38), ("NormalRain", 20), ("HeavyRain", 16), ("Windy", 13), ("Drizzle", 8), ("Gale", 5), ("NorthernLights", 10)]
     },
     "Autumn": {
-        1: [("NormalRain", 34), ("Dry", 24), ("Drizzle", 16), ("HeavyRain", 14), ("Windy", 9), ("Gale", 3), ("Snow", 0)],
-        2: [("NormalRain", 32), ("HeavyRain", 20), ("Drizzle", 16), ("Dry", 14), ("Windy", 13), ("Gale", 5), ("Snow", 0)],
-        3: [("HeavyRain", 28), ("NormalRain", 26), ("Windy", 14), ("Drizzle", 14), ("Dry", 8), ("Gale", 8), ("Snow", 2)],
-        4: [("NormalRain", 30), ("HeavyRain", 22), ("Drizzle", 14), ("Windy", 12), ("Dry", 10), ("Gale", 6), ("Snow", 6)]
+        1: [("NormalRain", 34), ("Dry", 24), ("Drizzle", 16), ("HeavyRain", 14), ("Windy", 9), ("Gale", 3), ("Nightmare", 10)],
+        2: [("NormalRain", 32), ("HeavyRain", 20), ("Drizzle", 16), ("Dry", 14), ("Windy", 13), ("Gale", 5), ("Nightmare", 10)],
+        3: [("HeavyRain", 28), ("NormalRain", 26), ("Windy", 14), ("Drizzle", 14), ("Dry", 8), ("Gale", 8), ("Nightmare", 10)],
+        4: [("NormalRain", 30), ("HeavyRain", 22), ("Drizzle", 14), ("Windy", 12), ("Dry", 10), ("Gale", 6), ("Nightmare", 10)]
     },
     "Winter": {
         1: [("Snow", 30), ("NormalRain", 24), ("Dry", 18), ("Windy", 11), ("Drizzle", 8), ("HeavyRain", 6), ("Gale", 3)],
