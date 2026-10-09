@@ -148,6 +148,9 @@ class WeatherCardGenerator:
         self.font_small_bold= get_font(bold_paths, 16)
         self.font_pill_time = get_font(bold_paths, 18)
         self.font_pill_temp = get_font(bold_paths, 24)
+        self.font_micro     = get_font(font_paths, 13)
+        self.font_micro_bold= get_font(bold_paths, 13)
+
 
     def _draw_gradient(self, draw: ImageDraw.ImageDraw, color_top, color_bottom):
         for y in range(self.height):
@@ -683,15 +686,17 @@ class WeatherCardGenerator:
         
         # Weather Condition Display & Weather Vector Icon
         cond_text = data.get("weather_display", "Drizzle • Gentle Rain")
+        import re
+        cond_clean = re.sub(r'[\U00010000-\U0010ffff]', '', cond_text).strip()
         hero_cx = (left_x0 + left_x1) // 2
         try:
-            bbox = self.font_hero_cond.getbbox(cond_text)
+            bbox = self.font_hero_cond.getbbox(cond_clean)
             tw = bbox[2] - bbox[0]
         except Exception:
-            tw = len(cond_text) * 18
+            tw = len(cond_clean) * 18
         icon_cx = hero_cx - (tw // 2) - 24
         self._draw_weather_icon(draw, icon_cx, left_y0 + 278, weather_type, size=30)
-        draw.text((hero_cx + 16, left_y0 + 262), cond_text, font=self.font_hero_cond, fill=(255, 255, 255, 250), anchor="mt")
+        draw.text((hero_cx + 16, left_y0 + 262), cond_clean, font=self.font_hero_cond, fill=(255, 255, 255, 250), anchor="mt")
         
         # Season Badge Box (Wide inner margin)
         season_y0 = left_y0 + 328
@@ -702,8 +707,45 @@ class WeatherCardGenerator:
         season_name = data.get('season', 'Summer')
         season_day = data.get('season_day', 1)
         slot_idx = data.get('slot_index', 1)
+        
+        # Calculate real countdown to next 2-hour weather roll
+        slot_prog = data.get("slot_progress")
+        if slot_prog is not None and isinstance(slot_prog, (int, float)):
+            rem_sec = int((1.0 - min(1.0, max(0.0, float(slot_prog)))) * 7200)
+        else:
+            try:
+                import time
+                from src.game_data_engine import get_current_season_state
+                s_state = get_current_season_state()
+                rem_sec = s_state.get("seconds_remaining_in_slot", 3600)
+            except Exception:
+                rem_sec = 3600
+
+        rem_h = rem_sec // 3600
+        rem_m = (rem_sec % 3600) // 60
+        countdown_str = f"{rem_h}h {rem_m:02d}m" if rem_h > 0 else f"{rem_m}m"
+
+        cur_slot = int(slot_idx) if str(slot_idx).isdigit() else 1
+        if cur_slot < 1 or cur_slot > 6:
+            cur_slot = 1
+        next_slot = (cur_slot % 6) + 1
+
+        # Determine upcoming roll probabilities
+        odds = data.get("odds", [])
+        if not odds:
+            try:
+                from src.game_data_engine import get_seasonal_odds
+                raw_odds = get_seasonal_odds(season_name, season_day)
+                odds = [(name, name, pct) for name, pct in raw_odds]
+            except Exception:
+                odds = [("Dry", "Dry", 40), ("Rain", "Rain", 25), ("Windy", "Windy", 15)]
+
+        top_next_name = str(odds[0][0]) if len(odds) > 0 else "Normal"
+        top_next_key = str(odds[0][1]) if len(odds) > 0 else "Dry"
+        top_next_pct = int(odds[0][2]) if len(odds) > 0 else 30
+
         draw.text(((left_x0 + left_x1) // 2, season_y0 + 20), f"SEASON: {season_name.upper()}", font=self.font_title, fill=(255, 255, 255, 245), anchor="mt")
-        season_desc = f"Day {season_day} of 4 • Weather Slot {slot_idx} of 6 (Rolls every 2 Hours)"
+        season_desc = f"Day {season_day} of 4 • Slot {slot_idx} of 6 (Next Roll in {countdown_str})"
         draw.text(((left_x0 + left_x1) // 2, season_y0 + 58), season_desc, font=self.font_body, fill=theme["sub_text"], anchor="mt")
 
         # Dewdrop Portal & Lycaros Boss Raid Card (Generous padding from borders)
@@ -735,16 +777,56 @@ class WeatherCardGenerator:
                               fill_color=theme["card_fill"], border_color=theme["card_border"], blur_radius=6)
         draw = ImageDraw.Draw(img)
         draw.text((right_x0 + 40, hour_y0 + 20), "Hourly Weather Forecast", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((right_x1 - 40, hour_y0 + 24), "Rolls every 2 Real Hours", font=self.font_small, fill=theme["sub_text"], anchor="ra")
+        next_header_str = f"Next Roll in {countdown_str} • Top Chance: {top_next_name} ({top_next_pct}%)"
+        draw.text((right_x1 - 40, hour_y0 + 24), next_header_str, font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
 
-        slots = data.get("hourly_slots", [
-            {"time": "04 AM", "icon": "Dry", "temp": "28°", "prob": "35%", "is_active": False},
-            {"time": "08 AM", "icon": "NorthernLights", "temp": "29°", "prob": "22%", "is_active": False},
-            {"time": "Now",   "icon": weather_type, "temp": "31°", "prob": "Live", "is_active": True},
-            {"time": "04 PM", "icon": "Nightmare", "temp": "30°", "prob": "12%", "is_active": False},
-            {"time": "08 PM", "icon": "Rain", "temp": "26°", "prob": "20%", "is_active": False},
-            {"time": "12 AM", "icon": "Night", "temp": "24°", "prob": "8%",  "is_active": False},
-        ])
+        # Dynamically build 6 daily weather roll slots
+        SLOT_HOURS = ["04 AM", "08 AM", "12 PM", "04 PM", "08 PM", "12 AM"]
+        slots = []
+        for i in range(1, 7):
+            s_time = SLOT_HOURS[i - 1]
+            if i == cur_slot:
+                slots.append({
+                    "time": "Now",
+                    "badge": "LIVE",
+                    "icon": weather_type,
+                    "prob": "Live",
+                    "temp": temp_val,
+                    "is_active": True,
+                    "is_next": False
+                })
+            elif i == next_slot:
+                slots.append({
+                    "time": s_time,
+                    "badge": f"NEXT",
+                    "icon": top_next_key,
+                    "prob": f"{top_next_pct}%",
+                    "temp": f"in {countdown_str}",
+                    "is_active": False,
+                    "is_next": True
+                })
+            elif i < cur_slot:
+                slots.append({
+                    "time": s_time,
+                    "badge": "PAST",
+                    "icon": "Dry",
+                    "prob": "--",
+                    "temp": "--",
+                    "is_active": False,
+                    "is_next": False
+                })
+            else:
+                offset = (i - next_slot) % len(odds)
+                f_name, f_key, f_pct = odds[offset] if offset < len(odds) else ("Dry", "Dry", 20)
+                slots.append({
+                    "time": s_time,
+                    "badge": f"Roll {i}",
+                    "icon": f_key,
+                    "prob": f"{int(f_pct)}%",
+                    "temp": f"~{int(f_pct)}%",
+                    "is_active": False,
+                    "is_next": False
+                })
 
         pill_w = 114
         pill_gap = 14
@@ -756,20 +838,40 @@ class WeatherCardGenerator:
             px0 = start_px + i * (pill_w + pill_gap)
             px1 = px0 + pill_w
             is_act = s.get("is_active", False)
+            is_nxt = s.get("is_next", False)
+            
             if is_act:
                 self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=18,
                                       fill_color=theme["pill_active_fill"], border_color=theme["pill_active_border"], blur_radius=4)
+            elif is_nxt:
+                self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=18,
+                                      fill_color=(28, 48, 76, 195), border_color=(130, 240, 255, 230), blur_radius=4)
             else:
                 self._draw_glass_card(img, px0, pill_y0, px1, pill_y1, radius=18,
                                       fill_color=theme["pill_inactive_fill"], border_color=theme["card_border"], blur_radius=4)
+            
             draw = ImageDraw.Draw(img)
             pcx = (px0 + px1) // 2
-            t_col = (255, 255, 255, 255) if is_act else (210, 225, 255, 205)
+            
+            if is_act:
+                t_col = (255, 255, 255, 255)
+            elif is_nxt:
+                t_col = (130, 240, 255, 255)
+            else:
+                t_col = (210, 225, 255, 205)
+                
             draw.text((pcx, pill_y0 + 10), s["time"], font=self.font_pill_time, fill=t_col, anchor="mt")
             self._draw_weather_icon(draw, pcx, pill_y0 + 48, s.get("icon", "Dry"), size=28)
-            p_col = (130, 240, 255, 255) if is_act else (170, 210, 255, 185)
-            draw.text((pcx, pill_y0 + 74), s.get("prob", "0%"), font=self.font_small, fill=p_col, anchor="mt")
-            draw.text((pcx, pill_y0 + 98), s.get("temp", "30°"), font=self.font_pill_temp, fill=(255, 255, 255, 255), anchor="mt")
+            
+            if is_act:
+                p_col = (130, 240, 255, 255)
+            elif is_nxt:
+                p_col = (255, 225, 140, 255)
+            else:
+                p_col = (170, 210, 255, 185)
+                
+            draw.text((pcx, pill_y0 + 74), s.get("prob", "0%"), font=self.font_small_bold if is_nxt else self.font_small, fill=p_col, anchor="mt")
+            draw.text((pcx, pill_y0 + 98), s.get("temp", "30°"), font=self.font_small_bold if is_nxt else self.font_pill_temp, fill=(255, 255, 255, 255), anchor="mt")
 
         # 2. Market & Active Modifiers Card (Clean Full-Width Center Card)
         mod_y0 = hour_y1 + 18
@@ -832,7 +934,7 @@ class WeatherCardGenerator:
                               fill_color=theme["card_fill"], border_color=theme["card_border"], blur_radius=6)
         draw = ImageDraw.Draw(img)
         draw.text((right_x0 + 40, gacha_y0 + 20), "24H Weather Gacha Forecast", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((right_x1 - 40, gacha_y0 + 24), f"Day {data.get('season_day', 1)} Seasonal Probability Pool", font=self.font_small, fill=theme["sub_text"], anchor="ra")
+        draw.text((right_x1 - 40, gacha_y0 + 24), f"🎲 Next 2-Hour Roll Chances (in {countdown_str})", font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
 
         odds = data.get("odds", [
             ["Dry", "Dry", 38],
