@@ -26,16 +26,7 @@ def main():
     else:
         print("[Launcher] ⚠️ WARNING: DISCORD_BOT token not found in environment variables!")
 
-    # 1b. Start Alt Account Self-Bot as a dedicated, independent process if DISCORD_USER_TOKEN is set
-    user_token = os.environ.get("DISCORD_USER_TOKEN")
-    if user_token:
-        print(f"[Launcher] Discord User Token detected ({user_token[:6]}...). Launching stealth self-bot listener...")
-        user_env = os.environ.copy()
-        user_env["DISCORD_USER_TOKEN"] = user_token
-        selfbot_proc = subprocess.Popen([sys.executable, "-m", "src.selfbot_client"], env=user_env)
-        print(f"[Launcher] Stealth Self-Bot sub-process started (PID: {selfbot_proc.pid})")
-    else:
-        print("[Launcher] (Info: DISCORD_USER_TOKEN not set, skipping self-bot listener)")
+    # (Selfbot disabled for account security)
 
     # 2. Start Gunicorn Web Server for Cloudflare/Discord CDN and Webhook handling
     raw_port = os.environ.get("PORT", "8080")

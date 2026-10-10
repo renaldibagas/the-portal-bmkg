@@ -74,38 +74,9 @@ def init_cloud_discord_bot():
 init_cloud_discord_bot()
 
 # -----------------------------------------------------------------
-# 24/7 CLOUD DISCORD STEALTH SELF-BOT (Alt Account Prefix Listener)
+# CLOUD DISCORD STEALTH SELF-BOT (DISABLED FOR SECURITY)
 # -----------------------------------------------------------------
 _selfbot_started = False
-_selfbot_user = None
-
-def init_cloud_selfbot():
-    global _selfbot_started, _selfbot_user
-    if _selfbot_started:
-        return
-    user_token = os.environ.get("DISCORD_USER_TOKEN")
-    if not user_token:
-        env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-        if os.path.exists(env_file):
-            try:
-                with open(env_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.startswith("DISCORD_USER_TOKEN="):
-                            user_token = line.strip().split("=", 1)[1].strip("\"'")
-                            break
-            except Exception:
-                pass
-
-    if user_token:
-        _selfbot_started = True
-        try:
-            from src.selfbot_client import start_selfbot_background
-            start_selfbot_background(user_token)
-            print("[Cloud] 🤖 Stealth Self-Bot Listener launched 24/7 on Railway/Gunicorn!")
-        except Exception as se:
-            print(f"[Cloud Error] Failed to launch selfbot worker: {se}")
-
-init_cloud_selfbot()
 
 
 def upload_card_to_cdn(img_bytes, base_name="weather_card.jpg"):
