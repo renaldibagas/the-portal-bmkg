@@ -52,13 +52,17 @@ USER_INSTALLS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspat
 # Discord.py 1.7 vs 2.x compatibility
 HAS_SLASH_TREE = hasattr(discord, "app_commands") and app_commands is not None
 
-APP_INSTALL_KWARGS = {}
-if HAS_SLASH_TREE:
-    if hasattr(app_commands, "AppInstallationType") and hasattr(app_commands, "AppCommandContext"):
-        APP_INSTALL_KWARGS = {
-            "allowed_installs": app_commands.AppInstallationType(guild=True, user=True),
-            "allowed_contexts": app_commands.AppCommandContext(guild=True, dm_channel=True, private_channel=True)
-        }
+def user_install(func):
+    """Gracefully applies user-install and context decorators if supported by discord.py 2.4+."""
+    if HAS_SLASH_TREE:
+        try:
+            if hasattr(app_commands, "allowed_installs"):
+                func = app_commands.allowed_installs(guilds=True, users=True)(func)
+            if hasattr(app_commands, "allowed_contexts"):
+                func = app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(func)
+        except Exception as e:
+            print(f"[UserInstall] Decorator error: {e}")
+    return func
 
 def track_interaction(interaction: discord.Interaction):
     """Logs user profile installation and usage analytics."""
@@ -458,7 +462,8 @@ async def cmd_prefix_botstats(ctx):
 
 # Register Slash Commands if discord.py 2.x app_commands is present
 if HAS_SLASH_TREE:
-    @bot.tree.command(name="weather", description="Check current live weather, temperature, and anime radar card.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="weather", description="Check current live weather, temperature, and anime radar card.")
+    @user_install
     async def slash_weather(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer()
@@ -488,42 +493,48 @@ if HAS_SLASH_TREE:
         embed, f = build_weather_embed_and_file()
         await interaction.followup.send(embed=embed, file=f)
 
-    @bot.tree.command(name="gacha", description="View today's 24-hour seasonal weather probability gacha pool.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="gacha", description="View today's 24-hour seasonal weather probability gacha pool.")
+    @user_install
     async def slash_gacha(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer()
         embed = build_gacha_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="portal", description="View Dewdrop Portal countdown, Lycaros Boss raid, and Rift mutations.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="portal", description="View Dewdrop Portal countdown, Lycaros Boss raid, and Rift mutations.")
+    @user_install
     async def slash_portal(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer()
         embed = build_portal_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="modifiers", description="Inspect active realm buffs, price impacts, and combat modifiers.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="modifiers", description="Inspect active realm buffs, price impacts, and combat modifiers.")
+    @user_install
     async def slash_modifiers(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer()
         embed = build_modifiers_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="forecast", description="Preview 6-slot 2-hour roll schedule for the current seasonal cycle.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="forecast", description="Preview 6-slot 2-hour roll schedule for the current seasonal cycle.")
+    @user_install
     async def slash_forecast(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer()
         embed = build_forecast_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="help", description="List all available BMKG weather observatory slash commands.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="help", description="List all available BMKG weather observatory slash commands.")
+    @user_install
     async def slash_help(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer()
         embed = build_help_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="botstats", description="View bot installation analytics, user profile installs, and activity.", **APP_INSTALL_KWARGS)
+    @bot.tree.command(name="botstats", description="View bot installation analytics, user profile installs, and activity.")
+    @user_install
     async def slash_botstats(interaction: discord.Interaction):
         track_interaction(interaction)
         await interaction.response.defer(ephemeral=True)
