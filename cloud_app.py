@@ -262,6 +262,14 @@ def get_latest_telemetry():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/stats", methods=["GET"])
+def handle_stats():
+    try:
+        from src.discord_bot import get_install_stats
+        return jsonify(get_install_stats())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/weather", methods=["POST"])
 def handle_weather():
     try:

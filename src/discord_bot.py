@@ -5,13 +5,15 @@ AND Discord Slash Commands (/weather, /gacha, /portal, /modifiers, /forecast, /h
 Compatible across both discord.py 1.7.x and modern discord.py 2.x on Python 3.7+ / 3.11+ / Render Cloud.
 """
 
+from __future__ import annotations
+
 import os
 import io
 import json
 import time
 import asyncio
 import datetime
-from typing import Optional
+from typing import Optional, Any
 
 import discord
 from discord.ext import commands
@@ -45,9 +47,100 @@ def get_bot_token():
 
 DISCORD_BOT_TOKEN = get_bot_token()
 LATEST_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bmkg_latest_state.json")
+USER_INSTALLS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "user_installs.json")
 
 # Discord.py 1.7 vs 2.x compatibility
 HAS_SLASH_TREE = hasattr(discord, "app_commands") and app_commands is not None
+
+APP_INSTALL_KWARGS = {}
+if HAS_SLASH_TREE:
+    if hasattr(app_commands, "AppInstallationType") and hasattr(app_commands, "AppCommandContext"):
+        APP_INSTALL_KWARGS = {
+            "allowed_installs": app_commands.AppInstallationType(guild=True, user=True),
+            "allowed_contexts": app_commands.AppCommandContext(guild=True, dm_channel=True, private_channel=True)
+        }
+
+def track_interaction(interaction: discord.Interaction):
+    """Logs user profile installation and usage analytics."""
+    try:
+        user_id = str(interaction.user.id)
+        username = str(interaction.user)
+        now_iso = datetime.datetime.utcnow().isoformat()
+
+        is_user_install = False
+        owners = getattr(interaction, "authorizing_integration_owners", None)
+        if isinstance(owners, dict):
+            for k in owners.keys():
+                if str(k) in ("1", "user") or getattr(k, "name", "") == "user" or getattr(k, "value", None) == 1:
+                    is_user_install = True
+                    break
+        elif interaction.guild is None:
+            is_user_install = True
+
+        stats = {"users": {}, "guilds": {}, "total_invocations": 0}
+        if os.path.exists(USER_INSTALLS_FILE):
+            try:
+                with open(USER_INSTALLS_FILE, "r", encoding="utf-8") as f:
+                    stats = json.load(f)
+            except Exception:
+                pass
+
+        stats["total_invocations"] = stats.get("total_invocations", 0) + 1
+
+        if "users" not in stats:
+            stats["users"] = {}
+        if "guilds" not in stats:
+            stats["guilds"] = {}
+
+        if user_id not in stats["users"]:
+            stats["users"][user_id] = {
+                "username": username,
+                "first_seen": now_iso,
+                "last_seen": now_iso,
+                "count": 1,
+                "user_installed": is_user_install
+            }
+        else:
+            stats["users"][user_id]["last_seen"] = now_iso
+            stats["users"][user_id]["count"] = stats["users"][user_id].get("count", 0) + 1
+            stats["users"][user_id]["username"] = username
+            if is_user_install:
+                stats["users"][user_id]["user_installed"] = True
+
+        if interaction.guild:
+            gid = str(interaction.guild.id)
+            gname = interaction.guild.name
+            if gid not in stats["guilds"]:
+                stats["guilds"][gid] = {"name": gname, "count": 1, "last_seen": now_iso}
+            else:
+                stats["guilds"][gid]["name"] = gname
+                stats["guilds"][gid]["count"] = stats["guilds"][gid].get("count", 0) + 1
+                stats["guilds"][gid]["last_seen"] = now_iso
+
+        with open(USER_INSTALLS_FILE, "w", encoding="utf-8") as f:
+            json.dump(stats, f, indent=2)
+    except Exception as e:
+        print(f"[Analytics] Error tracking interaction: {e}")
+
+def get_install_stats() -> dict:
+    """Returns summarized installation statistics."""
+    stats = {"users": {}, "guilds": {}, "total_invocations": 0}
+    if os.path.exists(USER_INSTALLS_FILE):
+        try:
+            with open(USER_INSTALLS_FILE, "r", encoding="utf-8") as f:
+                stats = json.load(f)
+        except Exception:
+            pass
+    users = stats.get("users", {})
+    profile_installs = [u for u in users.values() if u.get("user_installed", False)]
+    return {
+        "total_users": len(users),
+        "total_profile_installs": len(profile_installs),
+        "total_guilds": len(stats.get("guilds", {})),
+        "total_invocations": stats.get("total_invocations", 0),
+        "users": users,
+        "guilds": stats.get("guilds", {})
+    }
 
 intents = discord.Intents.default()
 intents.members = True
@@ -339,10 +432,35 @@ async def cmd_prefix_help(ctx):
     embed = build_help_embed()
     await ctx.send(embed=embed)
 
+@bot.command(name="botstats", aliases=["installs"])
+async def cmd_prefix_botstats(ctx):
+    stats = get_install_stats()
+    embed = discord.Embed(
+        title="📊 BMKG Bot Installation & User Profile Analytics",
+        color=0x3498DB,
+        timestamp=datetime.datetime.utcnow()
+    )
+    embed.add_field(name="👤 Profile Installs", value=f"**{stats['total_profile_installs']}** users", inline=True)
+    embed.add_field(name="👥 Total Users Active", value=f"**{stats['total_users']}** users", inline=True)
+    embed.add_field(name="🏰 Servers Active", value=f"**{stats['total_guilds']}** servers", inline=True)
+    embed.add_field(name="⚡ Total Invocations", value=f"**{stats['total_invocations']}** times", inline=True)
+
+    recent_users = []
+    for uid, udata in list(stats["users"].items())[-6:]:
+        tag = "🌟 Profile Installed" if udata.get("user_installed") else "Server User"
+        recent_users.append(f"• **{udata.get('username', uid)}** (`{uid}`) — {tag} ({udata.get('count', 0)} uses)")
+
+    if recent_users:
+        embed.add_field(name="🕒 Recent Users", value="\n".join(recent_users), inline=False)
+
+    embed.set_footer(text="BMKG Profile App Analytics")
+    await ctx.send(embed=embed)
+
 # Register Slash Commands if discord.py 2.x app_commands is present
 if HAS_SLASH_TREE:
-    @bot.tree.command(name="weather", description="Check current live weather, temperature, and anime radar card.")
+    @bot.tree.command(name="weather", description="Check current live weather, temperature, and anime radar card.", **APP_INSTALL_KWARGS)
     async def slash_weather(interaction: discord.Interaction):
+        track_interaction(interaction)
         await interaction.response.defer()
         
         # Only purge messages if executed inside the dedicated weather channel
@@ -370,35 +488,67 @@ if HAS_SLASH_TREE:
         embed, f = build_weather_embed_and_file()
         await interaction.followup.send(embed=embed, file=f)
 
-    @bot.tree.command(name="gacha", description="View today's 24-hour seasonal weather probability gacha pool.")
+    @bot.tree.command(name="gacha", description="View today's 24-hour seasonal weather probability gacha pool.", **APP_INSTALL_KWARGS)
     async def slash_gacha(interaction: discord.Interaction):
+        track_interaction(interaction)
         await interaction.response.defer()
         embed = build_gacha_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="portal", description="View Dewdrop Portal countdown, Lycaros Boss raid, and Rift mutations.")
+    @bot.tree.command(name="portal", description="View Dewdrop Portal countdown, Lycaros Boss raid, and Rift mutations.", **APP_INSTALL_KWARGS)
     async def slash_portal(interaction: discord.Interaction):
+        track_interaction(interaction)
         await interaction.response.defer()
         embed = build_portal_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="modifiers", description="Inspect active realm buffs, price impacts, and combat modifiers.")
+    @bot.tree.command(name="modifiers", description="Inspect active realm buffs, price impacts, and combat modifiers.", **APP_INSTALL_KWARGS)
     async def slash_modifiers(interaction: discord.Interaction):
+        track_interaction(interaction)
         await interaction.response.defer()
         embed = build_modifiers_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="forecast", description="Preview 6-slot 2-hour roll schedule for the current seasonal cycle.")
+    @bot.tree.command(name="forecast", description="Preview 6-slot 2-hour roll schedule for the current seasonal cycle.", **APP_INSTALL_KWARGS)
     async def slash_forecast(interaction: discord.Interaction):
+        track_interaction(interaction)
         await interaction.response.defer()
         embed = build_forecast_embed()
         await interaction.followup.send(embed=embed)
 
-    @bot.tree.command(name="help", description="List all available BMKG weather observatory slash commands.")
+    @bot.tree.command(name="help", description="List all available BMKG weather observatory slash commands.", **APP_INSTALL_KWARGS)
     async def slash_help(interaction: discord.Interaction):
+        track_interaction(interaction)
         await interaction.response.defer()
         embed = build_help_embed()
         await interaction.followup.send(embed=embed)
+
+    @bot.tree.command(name="botstats", description="View bot installation analytics, user profile installs, and activity.", **APP_INSTALL_KWARGS)
+    async def slash_botstats(interaction: discord.Interaction):
+        track_interaction(interaction)
+        await interaction.response.defer(ephemeral=True)
+        stats = get_install_stats()
+
+        embed = discord.Embed(
+            title="📊 BMKG Bot Installation & User Profile Analytics",
+            color=0x3498DB,
+            timestamp=datetime.datetime.utcnow()
+        )
+        embed.add_field(name="👤 Profile Installs", value=f"**{stats['total_profile_installs']}** users", inline=True)
+        embed.add_field(name="👥 Total Users Active", value=f"**{stats['total_users']}** users", inline=True)
+        embed.add_field(name="🏰 Servers Active", value=f"**{stats['total_guilds']}** servers", inline=True)
+        embed.add_field(name="⚡ Total Slash Uses", value=f"**{stats['total_invocations']}** times", inline=True)
+
+        recent_users = []
+        for uid, udata in list(stats["users"].items())[-6:]:
+            tag = "🌟 Profile Installed" if udata.get("user_installed") else "Server User"
+            recent_users.append(f"• **{udata.get('username', uid)}** (`{uid}`) — {tag} ({udata.get('count', 0)} uses)")
+
+        if recent_users:
+            embed.add_field(name="🕒 Recent Users", value="\n".join(recent_users), inline=False)
+
+        embed.set_footer(text="BMKG Profile App Analytics")
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @bot.tree.command(name="createroles", description="Auto-create weather roles with matching colors in the server.")
     @app_commands.default_permissions(manage_roles=True)
