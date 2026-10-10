@@ -886,7 +886,7 @@ class WeatherCardGenerator:
             else:
                 t_col = (210, 225, 255, 205)
                 
-            draw.text((pcx, pill_y0 + 10), s["time"], font=self.font_pill_time, fill=t_col, anchor="mt")
+            draw.text((pcx, pill_y0 + 12), s["time"], font=self.font_table_hdr, fill=t_col, anchor="mt")
             self._draw_weather_icon(draw, pcx, pill_y0 + 48, s.get("icon", "Dry"), size=28)
             
             if is_act:
@@ -1063,7 +1063,7 @@ class WeatherCardGenerator:
             # Weather Icon & Label
             self._draw_weather_icon(draw, tbl_x0 + 14, ry0 + 13, key, size=18)
             lbl_col = (255, 255, 255, 255) if is_active_now else (230, 242, 255, 235)
-            draw.text((tbl_x0 + 26, ry0 + 5), str(label), font=self.font_table_name, fill=lbl_col)
+            draw.text((tbl_x0 + 26, ry0 + 5), str(label), font=self.font_table_hdr, fill=lbl_col)
 
             if is_active_now:
                 badge_bg = (255, 60, 85, 230) if "nightmare" in k_low else (0, 230, 175, 230)
