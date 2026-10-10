@@ -1,7 +1,9 @@
 import math
 import os
+import time
 import random
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from src.game_data_engine import get_current_season_state, get_seasonal_odds, SEASONAL_ODDS
 
 class WeatherCardGenerator:
     def __init__(self, width: int = 1600, height: int = 900, bg_dir: str = None):
@@ -153,6 +155,10 @@ class WeatherCardGenerator:
         self.font_stat_val  = get_font(bold_paths, 16)
         self.font_stat_hdr  = get_font(bold_paths, 14)
         self.font_stat_sub  = get_font(font_paths, 11)
+        self.font_table_hdr = get_font(bold_paths, 12)
+        self.font_table_val = get_font(bold_paths, 13)
+        self.font_table_name= get_font(bold_paths, 13)
+        self.font_table_sub = get_font(font_paths, 10)
 
 
     def _draw_gradient(self, draw: ImageDraw.ImageDraw, color_top, color_bottom):
@@ -321,6 +327,9 @@ class WeatherCardGenerator:
         - 'negative': Red background + Red text (#FF5252)
         - 'neutral': Soft blue background + White text
         """
+        import re
+        label = re.sub(r'[^\x20-\x7E\u00A0-\u024F\u2010-\u2027]', '', str(label)).strip()
+
         # Calculate text width
         try:
             bbox = self.font_chip.getbbox(label)
@@ -732,8 +741,6 @@ class WeatherCardGenerator:
             rem_sec = int((1.0 - min(1.0, max(0.0, float(slot_prog)))) * 7200)
         else:
             try:
-                import time
-                from src.game_data_engine import get_current_season_state
                 s_state = get_current_season_state()
                 rem_sec = s_state.get("seconds_remaining_in_slot", 3600)
             except Exception:
@@ -752,7 +759,6 @@ class WeatherCardGenerator:
         odds = data.get("odds", [])
         if not odds:
             try:
-                from src.game_data_engine import get_seasonal_odds
                 raw_odds = get_seasonal_odds(season_name, season_day)
                 odds = [(name, name, pct) for name, pct in raw_odds]
             except Exception:
@@ -794,18 +800,32 @@ class WeatherCardGenerator:
         self._draw_glass_card(img, right_x0, hour_y0, right_x1, hour_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"], blur_radius=6)
         draw = ImageDraw.Draw(img)
-        draw.text((right_x0 + 40, hour_y0 + 20), "Hourly Weather Forecast", font=self.font_title, fill=(255, 255, 255, 245))
-        next_header_str = f"Next Roll in {countdown_str} • Top Chance: {top_next_name} ({top_next_pct}%)"
+        draw.text((right_x0 + 40, hour_y0 + 20), "24H Weather Roll Schedule", font=self.font_title, fill=(255, 255, 255, 245))
+        next_header_str = f"Rolls every 2 Hours • Next in {countdown_str}"
         draw.text((right_x1 - 40, hour_y0 + 24), next_header_str, font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
 
-        # Dynamically build 6 daily weather roll slots
-        SLOT_HOURS = ["04 AM", "08 AM", "12 PM", "04 PM", "08 PM", "12 AM"]
+        # Dynamically build upcoming 6 weather roll slots (2 hours per slot in GMT+7)
+        now_ts = data.get("epoch_time", time.time())
+        tz_offset = 7 * 3600
+        gmt7_sec = int(now_ts + tz_offset) % 86400
+        cur_2h_slot = (gmt7_sec // 7200) % 12
+        today_midnight = int((now_ts + tz_offset) // 86400) * 86400 - tz_offset
+
         slots = []
-        for i in range(1, 7):
-            s_time = SLOT_HOURS[i - 1]
-            if i == cur_slot:
+        for k in range(6):
+            s_idx = (cur_2h_slot + k) % 12
+            h_start = (s_idx * 2) % 24
+            h_end = (h_start + 2) % 24
+            s_time_label = f"{h_start:02d}:00 - {h_end:02d}:00"
+            slot_epoch = today_midnight + (cur_2h_slot + k) * 7200 + 60
+            st = get_current_season_state(slot_epoch)
+            st_odds = get_seasonal_odds(st["season"], st["season_day"])
+            top_p_name, top_p_pct = st_odds[0][0], st_odds[0][1]
+            top_p_key = top_p_name.replace(" ", "")
+
+            if k == 0:
                 slots.append({
-                    "time": "Now",
+                    "time": s_time_label,
                     "badge": "LIVE",
                     "icon": weather_type,
                     "prob": "Live",
@@ -813,35 +833,23 @@ class WeatherCardGenerator:
                     "is_active": True,
                     "is_next": False
                 })
-            elif i == next_slot:
+            elif k == 1:
                 slots.append({
-                    "time": s_time,
-                    "badge": f"NEXT",
-                    "icon": top_next_key,
-                    "prob": f"{top_next_pct}%",
+                    "time": s_time_label,
+                    "badge": "NEXT",
+                    "icon": top_p_key,
+                    "prob": f"{top_p_pct}%",
                     "temp": f"in {countdown_str}",
                     "is_active": False,
                     "is_next": True
                 })
-            elif i < cur_slot:
-                slots.append({
-                    "time": s_time,
-                    "badge": "PAST",
-                    "icon": "Dry",
-                    "prob": "--",
-                    "temp": "--",
-                    "is_active": False,
-                    "is_next": False
-                })
             else:
-                offset = (i - next_slot) % len(odds)
-                f_name, f_key, f_pct = odds[offset] if offset < len(odds) else ("Dry", "Dry", 20)
                 slots.append({
-                    "time": s_time,
-                    "badge": f"Roll {i}",
-                    "icon": f_key,
-                    "prob": f"{int(f_pct)}%",
-                    "temp": f"~{int(f_pct)}%",
+                    "time": s_time_label,
+                    "badge": f"+{k*2}h",
+                    "icon": top_p_key,
+                    "prob": f"~{top_p_pct}%",
+                    "temp": top_p_name,
                     "is_active": False,
                     "is_next": False
                 })
@@ -961,80 +969,84 @@ class WeatherCardGenerator:
             else:
                 self._draw_buff_chip(img, draw, col1_x, mod_y0 + 98, "Movement Speed: 1.0x Normal", buff_type="neutral", max_width=col_w)
 
-        # 3. 24H Weather Gacha Forecast (2H, 4H, 8H, 12H, 24H Multi-Horizon Stats)
+        # 3. 24H Weather Gacha Forecast (12 two-hour roll slots across 24 hours)
         gacha_y0 = mod_y1 + 18
         gacha_y1 = right_y1
         self._draw_glass_card(img, right_x0, gacha_y0, right_x1, gacha_y1, radius=24,
                               fill_color=theme["card_fill"], border_color=theme["card_border"], blur_radius=6)
         draw = ImageDraw.Draw(img)
         draw.text((right_x0 + 36, gacha_y0 + 16), "24H Weather Gacha Forecast", font=self.font_title, fill=(255, 255, 255, 245))
-        draw.text((right_x1 - 36, gacha_y0 + 20), "Roll Odds: 2H • 4H • 8H • 12H • 24H", font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
+        draw.text((right_x1 - 36, gacha_y0 + 20), "2-Hour Roll Slots • GMT+7", font=self.font_small_bold, fill=(130, 240, 255, 245), anchor="ra")
 
         # Table Column Geometry across 763px usable card width
         tbl_x0 = right_x0 + 36
         tbl_x1 = right_x1 - 36
-        name_col_w = 215
-        
-        time_cols = [
-            ("2 Hours", 1),
-            ("4 Hours", 2),
-            ("8 Hours", 4),
-            ("12 Hours", 6),
-            ("24 Hours", 12),
-        ]
-        num_time = len(time_cols)
-        col_w = (tbl_x1 - (tbl_x0 + name_col_w)) // num_time
-        time_centers = [tbl_x0 + name_col_w + i * col_w + (col_w // 2) for i in range(num_time)]
+        name_col_w = 175
+        num_slots = 12
+        col_w = (tbl_x1 - (tbl_x0 + name_col_w)) // num_slots
+        time_centers = [tbl_x0 + name_col_w + i * col_w + (col_w // 2) for i in range(num_slots)]
+
+        # Determine current GMT+7 slot index (0 to 11)
+        now_ts = data.get("epoch_time", time.time())
+        tz_offset = 7 * 3600
+        gmt7_sec = int(now_ts + tz_offset) % 86400
+        cur_slot_idx_24h = (gmt7_sec // 7200) % 12
+        today_midnight = int((now_ts + tz_offset) // 86400) * 86400 - tz_offset
+
+        # Precompute the seasonal odds for all 12 slots across today
+        slot_odds_map = []
+        for i in range(12):
+            slot_epoch = today_midnight + i * 7200 + 60
+            st = get_current_season_state(slot_epoch)
+            odds_list = get_seasonal_odds(st["season"], st["season_day"])
+            odds_d = {k: v for k, v in odds_list}
+            if "NormalRain" in odds_d:
+                odds_d["Rain"] = odds_d["NormalRain"]
+            odds_d["NorthernLights"] = 10
+            odds_d["Nightmare"] = 10
+            slot_odds_map.append(odds_d)
 
         # Header Bar
-        hdr_y0 = gacha_y0 + 48
-        hdr_y1 = hdr_y0 + 26
+        hdr_y0 = gacha_y0 + 46
+        hdr_y1 = hdr_y0 + 25
         draw.rounded_rectangle([tbl_x0, hdr_y0, tbl_x1, hdr_y1], radius=6, fill=(20, 34, 58, 195), outline=(75, 120, 185, 90), width=1)
-        draw.text((tbl_x0 + 16, hdr_y0 + 5), "WEATHER EVENT", font=self.font_stat_hdr, fill=(175, 210, 255, 235))
-        
-        for i, (col_label, _) in enumerate(time_cols):
-            cx = time_centers[i]
-            draw.text((cx, hdr_y0 + 5), col_label.upper(), font=self.font_stat_hdr, fill=(175, 210, 255, 235), anchor="mt")
+        draw.text((tbl_x0 + 14, hdr_y0 + 6), "WEATHER EVENT", font=self.font_table_hdr, fill=(175, 210, 255, 235))
 
-        # Odds Data
-        odds = data.get("odds", [
-            ["Rain", "Rain", 30],
-            ["Heavy Rain", "HeavyRain", 22],
-            ["Drizzle", "Drizzle", 14],
-            ["Windy", "Windy", 12],
-            ["Dry", "Dry", 10],
-            ["Gale", "Gale", 6],
-            ["Nightmare", "Nightmare", 10]
-        ])
+        for i in range(num_slots):
+            cx = time_centers[i]
+            col_lbl = f"{i*2:02d}:00"
+            is_cur_col = (i == cur_slot_idx_24h)
+            h_col = (255, 225, 140, 255) if is_cur_col else (175, 210, 255, 235)
+            if is_cur_col:
+                # Highlight active slot in header
+                draw.rounded_rectangle([cx - 22, hdr_y0 + 2, cx + 22, hdr_y1 - 2], radius=4, fill=(35, 75, 130, 210))
+            draw.text((cx, hdr_y0 + 6), col_lbl, font=self.font_table_hdr, fill=h_col, anchor="mt")
+
+        # Full 9 weathers guaranteed
+        WEATHERS_TO_SHOW = [
+            ("Northern Lights", "NorthernLights"),
+            ("Nightmare", "Nightmare"),
+            ("Snow", "Snow"),
+            ("Rain", "Rain"),
+            ("Dry", "Dry"),
+            ("Windy", "Windy"),
+            ("Drizzle", "Drizzle"),
+            ("Heavy Rain", "HeavyRain"),
+            ("Gale", "Gale"),
+        ]
 
         cur_w_low = weather_type.lower()
-        cur_season_low = str(data.get("season", "")).lower()
+        row_start_y = hdr_y1 + 4
+        row_h = 26
+        row_gap = 3
 
-        # Cumulative probability: P_n = 1 - (1 - p)^n
-        def calc_cum_pct(p_pct, rolls):
-            p = max(0.0, min(100.0, float(p_pct))) / 100.0
-            if p <= 0:
-                return 0
-            return int(round((1.0 - math.pow(1.0 - p, rolls)) * 100.0))
-
-        # Render Weather Rows (up to 7 weathers)
-        row_start_y = hdr_y1 + 6
-        row_h = 34
-        row_gap = 4
-        
-        for idx, (label, key, pct) in enumerate(odds[:7]):
+        for idx, (label, key) in enumerate(WEATHERS_TO_SHOW):
             ry0 = row_start_y + idx * (row_h + row_gap)
             ry1 = ry0 + row_h
-            
+
             k_low = str(key).lower()
             is_active_now = (k_low in cur_w_low or cur_w_low in k_low)
-            
-            pct_val = int(pct) if isinstance(pct, (int, float)) else 0
-            if "nightmare" in k_low and ("autumn" in cur_season_low or pct_val <= 0):
-                pct_val = 10
-            elif "northern" in k_low and ("summer" in cur_season_low or pct_val <= 0):
-                pct_val = 10
-                
+
             # Row Background styling
             if is_active_now:
                 if "nightmare" in k_low:
@@ -1043,58 +1055,47 @@ class WeatherCardGenerator:
                     r_fill, r_bord = (16, 68, 62, 205), (0, 255, 195, 225)
                 else:
                     r_fill, r_bord = (32, 72, 130, 205), (130, 240, 255, 225)
-                draw.rounded_rectangle([tbl_x0, ry0, tbl_x1, ry1], radius=8, fill=r_fill, outline=r_bord, width=1)
+                draw.rounded_rectangle([tbl_x0, ry0, tbl_x1, ry1], radius=6, fill=r_fill, outline=r_bord, width=1)
             else:
                 bg_col = (20, 32, 54, 115) if idx % 2 == 1 else (15, 24, 42, 65)
-                draw.rounded_rectangle([tbl_x0, ry0, tbl_x1, ry1], radius=8, fill=bg_col)
+                draw.rounded_rectangle([tbl_x0, ry0, tbl_x1, ry1], radius=6, fill=bg_col)
 
             # Weather Icon & Label
-            self._draw_weather_icon(draw, tbl_x0 + 16, ry0 + 17, key, size=22)
+            self._draw_weather_icon(draw, tbl_x0 + 14, ry0 + 13, key, size=18)
             lbl_col = (255, 255, 255, 255) if is_active_now else (230, 242, 255, 235)
-            draw.text((tbl_x0 + 34, ry0 + 7), str(label), font=self.font_small_bold, fill=lbl_col)
-            
-            if is_active_now:
-                # Small LIVE badge next to label
-                badge_bg = (255, 60, 85, 230) if "nightmare" in k_low else (0, 230, 175, 230)
-                badge_x0 = tbl_x0 + 148
-                draw.rounded_rectangle([badge_x0, ry0 + 8, badge_x0 + 44, ry0 + 26], radius=4, fill=badge_bg)
-                draw.text((badge_x0 + 22, ry0 + 10), "LIVE", font=self.font_micro_bold, fill=(255, 255, 255, 255), anchor="mt")
+            draw.text((tbl_x0 + 26, ry0 + 5), str(label), font=self.font_table_name, fill=lbl_col)
 
-            # Render 5 Probability Horizon Columns: 2h, 4h, 8h, 12h, 24h
-            for i, (_, rolls) in enumerate(time_cols):
+            if is_active_now:
+                badge_bg = (255, 60, 85, 230) if "nightmare" in k_low else (0, 230, 175, 230)
+                badge_x0 = tbl_x0 + 130
+                draw.rounded_rectangle([badge_x0, ry0 + 4, badge_x0 + 38, ry0 + 21], radius=4, fill=badge_bg)
+                draw.text((badge_x0 + 19, ry0 + 6), "LIVE", font=self.font_table_sub, fill=(255, 255, 255, 255), anchor="mt")
+
+            # Render 12 slot values
+            for i in range(num_slots):
                 cx = time_centers[i]
-                c_pct = calc_cum_pct(pct_val, rolls)
-                
-                # Dynamic text color scaling
-                if is_active_now:
-                    v_col = (255, 225, 120, 255) if i == 0 else (255, 255, 255, 255)
-                elif c_pct >= 80:
-                    v_col = (110, 255, 180, 255)
-                elif c_pct >= 50:
-                    v_col = (130, 240, 255, 255)
-                elif c_pct >= 25:
-                    v_col = (180, 225, 255, 235)
+                is_cur_col = (i == cur_slot_idx_24h)
+                pct = slot_odds_map[i].get(key, 0)
+
+                # Vertical column highlight for active slot
+                if is_cur_col and not is_active_now:
+                    draw.rounded_rectangle([cx - 20, ry0 + 2, cx + 20, ry1 - 2], radius=4, fill=(28, 55, 95, 140))
+
+                if is_cur_col and is_active_now:
+                    draw.text((cx, ry0 + 6), "LIVE", font=self.font_table_hdr, fill=(0, 255, 195, 255) if "northern" in k_low else (255, 225, 120, 255), anchor="mt")
+                elif pct > 0:
+                    if is_active_now:
+                        v_col = (255, 225, 140, 255)
+                    elif pct >= 50:
+                        v_col = (110, 255, 180, 255)
+                    elif pct >= 25:
+                        v_col = (130, 240, 255, 255)
+                    elif pct >= 15:
+                        v_col = (180, 225, 255, 235)
+                    else:
+                        v_col = (210, 225, 245, 215)
+                    draw.text((cx, ry0 + 5), f"{pct}%", font=self.font_table_val, fill=v_col, anchor="mt")
                 else:
-                    v_col = (195, 215, 240, 205)
-                
-                draw.text((cx, ry0 + 5), f"{c_pct}%", font=self.font_stat_val, fill=v_col, anchor="mt")
-                
-                # Micro Progress Fill Bar beneath percentage
-                bar_w = 48
-                bar_h = 4
-                bx0 = cx - (bar_w // 2)
-                by0 = ry0 + 24
-                draw.rectangle([bx0, by0, bx0 + bar_w, by0 + bar_h], fill=(35, 52, 78, 170))
-                
-                fill_len = max(2, int(bar_w * (c_pct / 100.0)))
-                if "northern" in k_low:
-                    b_col = (0, 245, 185, 230)
-                elif "nightmare" in k_low:
-                    b_col = (255, 65, 90, 230)
-                elif c_pct >= 75:
-                    b_col = (80, 240, 160, 220)
-                else:
-                    b_col = (100, 200, 255, 220)
-                draw.rectangle([bx0, by0, bx0 + fill_len, by0 + bar_h], fill=b_col)
+                    draw.text((cx, ry0 + 5), "0%", font=self.font_table_val, fill=(120, 140, 170, 110), anchor="mt")
 
         return img
