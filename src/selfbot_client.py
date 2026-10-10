@@ -6,6 +6,7 @@ Listens for '!weather', '!forecast', '!dewdrop', '!gacha' in whitelisted channel
 """
 
 import os
+import sys
 import io
 import time
 import json
@@ -14,6 +15,10 @@ import asyncio
 import aiohttp
 import requests
 from dotenv import load_dotenv
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from src.weather_card_generator import WeatherCardGenerator
 
